@@ -25,7 +25,7 @@ guardrail against the ways an eval quietly becomes worthless.
 4. **Do not count `absent` questions in the top-3 hit rate.** They have no correct
    chunk; scoring them either way distorts the number. Mark them `n/a`.
 5. **Do not accept a hedged refusal.** For `absent` questions the answer must be
-   exactly `이 책에는 없습니다`. "The book doesn't cover this, but Twain famously..."
+   exactly `Not in this book.`. "The book doesn't cover this, but Twain famously..."
    is a hallucination with a disclaimer attached — mark it wrong.
 6. **Do not hand-write `docs/EVAL.md`.** Regenerate it with `python -m eval.report`.
 

@@ -55,7 +55,7 @@ other.
 - **Wrong: the answer is factually right but the citation does not support it, or is
   missing.** An unsourced correct answer is worse than an honest refusal — it means
   the model used outside knowledge, which the assignment scores as wrong.
-- `absent`: correct only if the answer is exactly `이 책에는 없습니다`. Any hedged
+- `absent`: correct only if the answer is exactly `Not in this book.`. Any hedged
   version ("the book does not mention this, but Twain is known for...") is wrong.
 
 ## Output table (`docs/EVAL.md`, generated)

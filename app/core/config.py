@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     # 9 -> 1), with no change to Ch1/Ch3 ranks. See agent_docs/rag.md.
     ch2_index_prefix: str = "Mark Twain said: "
 
-    refusal_text: str = "이 책에는 없습니다"
+    refusal_text: str = "Not in this book."
 
 
 settings = Settings()

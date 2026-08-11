@@ -35,7 +35,7 @@ judgements in `eval/marks.yaml` and regenerate.
 
 **Retrieved:** `c0087(p.25) c0084(p.24) c0032(p.10)`  **Cited:** `c0087`  **Citations rejected:** 0
 
-**A:** He telegraphed the Associated Press: "The reports of my death are greatly exaggerated."
+**A:** He telegrammed the Associated Press: "The reports of my death are greatly exaggerated."
 
 ### q03 (fact) — top-3 O, correct O
 
@@ -67,15 +67,15 @@ judgements in `eval/marks.yaml` and regenerate.
 
 **Retrieved:** `c0090(p.26) c0133(p.29) c0061(p.18)`  **Cited:** `c0090`  **Citations rejected:** 0
 
-**A:** His pastor replied that he wouldn't worry about it if he had Twain's chances.
+**A:** His pastor replied that he wouldn't worry about it, if he had Twain's chances.
 
 ### q07 (multi) — top-3 O, correct O
 
 **Q:** This book gives two different accounts of how Samuel Clemens came to use the pen name 'Mark Twain'. What are both of them?
 
-**Retrieved:** `c0001(p.1) c0178(p.35) c0088(p.25)`  **Cited:** `c0001 c0001 c0178 c0178`  **Citations rejected:** 0
+**Retrieved:** `c0001(p.1) c0178(p.35) c0088(p.25)`  **Cited:** `c0001 c0001 c0178`  **Citations rejected:** 0
 
-**A:** One account: as a Mississippi steamboat pilot, Clemens took the leadsmen's call meaning two fathoms of safe water. The other: in Nevada saloons he called out 'Mark twain' to have two drinks written on his tab.
+**A:** One account: as a Mississippi steamboat pilot, Clemens took the leadsmen's call "Mark twain," meaning two fathoms of water — a safe depth. The other: in Nevada saloons he called out "Mark twain" to have two drinks written on his tab.
 
 ### q08 (multi) — top-3 O, correct O
 
@@ -83,7 +83,7 @@ judgements in `eval/marks.yaml` and regenerate.
 
 **Retrieved:** `c0089(p.25-26) c0088(p.25) c0183(p.41-43)`  **Cited:** `c0088 c0089`  **Citations rejected:** 0
 
-**A:** As a boy, Samuel Langhorne Clemens chased a page blowing down the street, caught it, and found it came from a biography of Joan of Arc, after which he read all he could about her. He told the Archbishop of Orléans that he would be "perfectly satisfied" in the next life if he were near Joan of Arc and as far from her enemies as possible.
+**A:** As a boy, Samuel Langhorne Clemens chased a piece of paper flying down the street and found it was a page from a biography of Joan of Arc, then began reading everything he could about her. He told the Archbishop of Orléans he would be "perfectly satisfied" in the next life if he were near Joan of Arc and as far as possible from her enemies.
 
 ### q09 (absent) — top-3 n/a, correct O
 
@@ -91,7 +91,7 @@ judgements in `eval/marks.yaml` and regenerate.
 
 **Retrieved:** `c0066(p.19) c0067(p.19) c0183(p.41-43)`  **Cited:** `—`  **Citations rejected:** 0
 
-**A:** 이 책에는 없습니다
+**A:** Not in this book.
 
 ### q10 (absent) — top-3 n/a, correct O
 
@@ -99,5 +99,5 @@ judgements in `eval/marks.yaml` and regenerate.
 
 **Retrieved:** `c0061(p.18) c0183(p.41-43) c0064(p.19)`  **Cited:** `—`  **Citations rejected:** 0
 
-**A:** 이 책에는 없습니다
+**A:** Not in this book.
 

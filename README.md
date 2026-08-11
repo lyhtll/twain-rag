@@ -2,7 +2,7 @@
 
 A minimal RAG system whose only knowledge source is one ebook — *Mark Twain Anecdotes and
 Quotes* (David Bruce, 2008). It answers from retrieved excerpts only, cites the chunk
-title and printed page for every claim, and answers `이 책에는 없습니다` when the book
+title and printed page for every claim, and answers `Not in this book.` when the book
 does not cover the question.
 
 The PDF is **not** in this repository. It is distributed for non-commercial use in

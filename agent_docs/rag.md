@@ -294,7 +294,7 @@ the cap). `AnswerAgent` is the only class that calls Claude.
 Rules the prompt must state explicitly:
 1. Answer using the provided excerpts only. Do not use anything you know about Mark
    Twain from outside them.
-2. If the excerpts do not contain the answer, reply exactly `이 책에는 없습니다`.
+2. If the excerpts do not contain the answer, reply exactly `Not in this book.`.
 3. For each claim, name the excerpt id and quote the sentence you relied on, verbatim.
 
 ### Citations are built in two steps and verified twice

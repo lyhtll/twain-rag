@@ -63,7 +63,7 @@ Read the relevant doc before starting a task.
 
 1. **Never answer from knowledge outside the retrieved chunks.** Supplementing an
    answer with what the model already knows about Mark Twain counts as wrong. If the
-   retrieved chunks do not contain the answer, reply `이 책에는 없습니다`. State this
+   retrieved chunks do not contain the answer, reply `Not in this book.`. State this
    constraint in the prompt itself, not just in code.
 2. **Every answer carries chunk titles and page numbers.** The model names which chunk
    and which sentence it used; the title and page come from the `Chunk` record, never
