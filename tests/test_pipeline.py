@@ -84,6 +84,38 @@ def test_lines_are_sorted_top_to_bottom():
     assert [ln.text for ln in page.lines] == ["first", "second"]
 
 
+def test_word_fragments_on_one_baseline_are_merged():
+    """PyMuPDF splits wide-set justified lines into one entry per word.
+
+    Left unmerged, `x_right` would describe a word rather than the line — the exact
+    signal Ch2 paragraph detection reads.
+    """
+    doc = FakeDoc(
+        [
+            FakePage(
+                [
+                    ("of", False, 269.87, 273.8),  # deliberately out of x order
+                    ("Humorist", False, 269.87, 120.3),
+                    ("Mark", False, 269.9, 159.6),  # 0.03pt off the baseline
+                    ("Huckleberry Finn, once stayed at the home", False, 283.79, 363.0),
+                ]
+            )
+        ]
+    )
+    page = PdfExtractor(doc=doc).parse()[0]
+    assert [ln.text for ln in page.lines] == [
+        "Humorist Mark of",
+        "Huckleberry Finn, once stayed at the home",
+    ]
+    assert page.lines[0].x_right == 273.8, "merged line keeps the rightmost edge"
+
+
+def test_bold_survives_a_merge():
+    doc = FakeDoc([FakePage([("What was Mark", True, 100.0, 200.0), ("Twain's", False, 100.0, 260.0)])])
+    page = PdfExtractor(doc=doc).parse()[0]
+    assert page.lines[0].bold is True
+
+
 def test_content_pages_drops_front_and_back_matter():
     doc = FakeDoc(
         [_front_matter(), _front_matter(), _front_matter()]

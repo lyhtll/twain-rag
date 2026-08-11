@@ -29,6 +29,10 @@ TEXT_FLAGS = pymupdf.TEXT_PRESERVE_LIGATURES | pymupdf.TEXT_PRESERVE_WHITESPACE
 CONTENT_FIRST_PAGE = 1
 CONTENT_LAST_PAGE = 47
 
+# Body leading is ~13.7pt, so anything within 3pt of the previous baseline is the
+# same visual line, not the next one.
+SAME_LINE_TOLERANCE = 3.0
+
 
 class PdfDocument(Protocol):
     def __len__(self) -> int: ...
@@ -75,22 +79,37 @@ class PdfExtractor:
 
 
 def _lines(page: Any) -> list[Line]:
-    out: list[Line] = []
+    """One `Line` per visual line of the page.
+
+    PyMuPDF splits a justified line into one entry per word when the word gaps are
+    wide (p.9 "Noisy Clocks" comes back as 7 fragments sharing y=269.87). Left as
+    fragments, `x_right` would describe a word instead of the line, which is exactly
+    the signal Ch2's paragraph detection reads. So fragments sharing a baseline are
+    merged back into one line.
+    """
+    fragments: list[tuple[float, float, float, bool, str]] = []
     for block in page.get_text("dict", flags=TEXT_FLAGS)["blocks"]:
         for line in block.get("lines", []):
             spans = line.get("spans", [])
             text = "".join(s["text"] for s in spans).strip()
             if not text:
                 continue
-            out.append(
-                Line(
-                    text=text,
-                    bold=any("Bold" in s.get("font", "") for s in spans),
-                    y_top=line["bbox"][1],
-                    x_right=line["bbox"][2],
-                )
+            x0, y0, x1, _ = line["bbox"]
+            fragments.append((y0, x0, x1, any("Bold" in s.get("font", "") for s in spans), text))
+
+    fragments.sort(key=lambda f: (f[0], f[1]))  # baseline, then left-to-right
+    out: list[Line] = []
+    for y0, _, x1, bold, text in fragments:
+        if out and abs(y0 - out[-1].y_top) <= SAME_LINE_TOLERANCE:
+            prev = out[-1]
+            out[-1] = Line(
+                text=f"{prev.text} {text}",
+                bold=prev.bold or bold,
+                y_top=prev.y_top,
+                x_right=max(prev.x_right, x1),
             )
-    out.sort(key=lambda ln: ln.y_top)
+        else:
+            out.append(Line(text=text, bold=bold, y_top=y0, x_right=x1))
     return out
 
 
