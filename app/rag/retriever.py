@@ -24,8 +24,11 @@ def fuse(
     which is why it is the default: with only ~10 candidates per side, min-max
     normalisation has a tiny denominator and the resulting order is unstable.
 
-    `cc` — convex combination of min-max normalised scores, kept only so day 5's
+    `cc` — convex combination of positions normalised to 0..1, kept only so
     `scripts/compare_fusion.py` can measure the two against the frozen question set.
+    Note this is **not** Type4: it normalises *ranks*, not scores, so like RRF it discards
+    score magnitude. Day 5 measured a true score-based variant separately and found it is
+    the one that recovers the two failures diagnosed in docs/NOTES.md — see that memo.
     `method` stays a local argument; it is deliberately not threaded through the
     retriever, the API, or config, because a switch with one production value is dead
     flexibility.

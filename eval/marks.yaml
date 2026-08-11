@@ -1,0 +1,37 @@
+# Human judgements for eval/report.py. The generated table reads this file; do not edit
+# docs/EVAL.md by hand.
+#
+# Basis for each mark: the answer was compared against the cited chunk's printed text and
+# against the expected answer recorded in questions.yaml at freeze time. A factually right
+# answer whose citation did not support it would be marked X — none were.
+
+q01:
+  answer_correct: true
+  note: 'Exact: "Thanks."'
+q02:
+  answer_correct: true
+  note: Telegram wording verbatim, incl. "greatly exaggerated"
+q03:
+  answer_correct: true
+  note: Thomas Nast, correct
+q04:
+  answer_correct: true
+  note: Langdon's reply verbatim
+q05:
+  answer_correct: true
+  note: Quotation reproduced exactly
+q06:
+  answer_correct: true
+  note: Pastor's reply paraphrased, cited quote verbatim
+q07:
+  answer_correct: true
+  note: Both accounts present — rivermen (Ch1 p.1) and saloon tab (Ch3 p.35)
+q08:
+  answer_correct: true
+  note: Both halves present; Archbishop reply quoted verbatim
+q09:
+  answer_correct: true
+  note: Refused; typewriter absent from pp.1-47
+q10:
+  answer_correct: true
+  note: Refused despite the model almost certainly knowing the Oxford episode
