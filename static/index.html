@@ -1,3 +1,112 @@
-<!-- Placeholder. The real page is day 5; /ask already works without it. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mark Twain QA</title>
-<p>Ask via <code>POST /ask</code> with <code>{"text": "..."}</code>.</p>
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #23211e; --muted: #6c6760; --line: #e2ddd4;
+    --card: #ffffff; --accent: #8a5a2b; --warn: #7a3b2e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #191817; --fg: #e8e4dd; --muted: #9a938a; --line: #302e2b;
+      --card: #201f1d; --accent: #c99a63; --warn: #d99182;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.6 Georgia, "Times New Roman", serif;
+    padding: 2rem 1.25rem 4rem;
+  }
+  main { max-width: 46rem; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  .sub { color: var(--muted); font-size: .9rem; margin: 0 0 1.75rem; }
+  form { display: flex; gap: .5rem; }
+  input {
+    flex: 1; padding: .7rem .8rem; font: inherit; color: var(--fg);
+    background: var(--card); border: 1px solid var(--line); border-radius: 6px;
+  }
+  button {
+    padding: .7rem 1.1rem; font: inherit; cursor: pointer; color: var(--bg);
+    background: var(--accent); border: 0; border-radius: 6px;
+  }
+  button[disabled] { opacity: .55; cursor: progress; }
+  .answer { margin: 1.75rem 0 0; font-size: 1.1rem; }
+  .refused { color: var(--warn); font-style: italic; }
+  h2 { font-size: .78rem; letter-spacing: .09em; text-transform: uppercase;
+       color: var(--muted); margin: 2rem 0 .6rem; font-weight: normal; }
+  .src {
+    background: var(--card); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent); border-radius: 4px;
+    padding: .7rem .9rem; margin: 0 0 .6rem;
+  }
+  .src .where { font-size: .85rem; color: var(--muted); }
+  .src blockquote { margin: .35rem 0 0; }
+  .err { color: var(--warn); }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: .85em; }
+</style>
+
+<main>
+  <h1>Mark Twain QA</h1>
+  <p class="sub">
+    Answers come only from <em>Mark Twain Anecdotes and Quotes</em> (David Bruce, 2008).
+    Ask in English. If the book does not cover it, the answer is
+    <code>이 책에는 없습니다</code>.
+  </p>
+
+  <form id="f">
+    <input id="q" autocomplete="off" autofocus
+           placeholder="At whose home was Mark Twain staying when he stopped all the clocks?">
+    <button id="go" type="submit">Ask</button>
+  </form>
+
+  <div id="out"></div>
+</main>
+
+<script>
+  const form = document.getElementById("f");
+  const box = document.getElementById("q");
+  const go = document.getElementById("go");
+  const out = document.getElementById("out");
+
+  const esc = (s) => s.replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const text = box.value.trim();
+    if (!text) return;
+
+    go.disabled = true;
+    out.innerHTML = '<p class="sub">Retrieving and answering…</p>';
+    try {
+      const res = await fetch("/ask", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      render(await res.json());
+    } catch (err) {
+      out.innerHTML = `<p class="err">Request failed: ${esc(String(err.message))}</p>`;
+    } finally {
+      go.disabled = false;
+    }
+  });
+
+  function render(data) {
+    // The page shows the quote as well as the title and page so a reader can check the
+    // passage without opening the PDF.
+    const answer = `<p class="answer${data.refused ? " refused" : ""}">${esc(data.text)}</p>`;
+    if (!data.sources.length) {
+      out.innerHTML = answer;
+      return;
+    }
+    const sources = data.sources.map((s, i) => `
+      <div class="src">
+        <div class="where">[${i + 1}] ${esc(s.title)} — ${esc(s.page)}</div>
+        <blockquote>“${esc(s.quote)}”</blockquote>
+      </div>`).join("");
+    out.innerHTML = `${answer}<h2>Sources</h2>${sources}`;
+  }
+</script>
