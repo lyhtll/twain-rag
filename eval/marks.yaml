@@ -1,55 +1,55 @@
-# Human judgements for eval/report.py. The generated table reads this file; do not edit
-# docs/EVAL.md by hand.
+# eval/report.py 가 읽는 사람 판정. docs/EVAL.md 를 손으로 고치지 말고 이 파일을 고친다.
 #
-# Basis for each mark: the answer was compared against the cited chunk's printed text and
-# against the expected answer recorded in questions.yaml at freeze time. A factually right
-# answer whose citation did not support it would be marked X — none were.
+# 판정 근거: 답변을 인용된 청크의 인쇄 원문과, 동결 시점에 questions.yaml 에 적어둔 기대
+# 답변과 대조했다. 사실은 맞지만 인용이 그 주장을 뒷받침하지 않는 답변은 X로 적는다 —
+# 이번에는 그런 문항이 없었다.
 #
-# `answer:` is the exact text that was judged. Generation is nondeterministic, so a
-# regenerated report can reword an answer; when it no longer matches, report.py shows
-# UNMARKED instead of inheriting a verdict for an answer no one read. Re-read the answer,
-# then update both fields together. The two `absent` questions carry no `answer:` — their
-# mark is computed from the refusal string, not judged by hand.
+# `answer:` 는 판정 대상이 된 답변 본문이다. 생성이 비결정적이라 재생성하면 표현이 바뀔 수
+# 있고, 그때 report.py 는 사람이 읽지 않은 답변에 판정을 물려주지 않고 UNMARKED 로 되돌린다.
+# 답변을 다시 읽고 두 필드를 함께 갱신한 뒤 `python -m eval.report --render-only` 로 다시
+# 그린다 — 그냥 재실행하면 답변이 또 바뀐다. `없음` 문항 2개는 `answer:` 가 없다. 거부
+# 문자열 대조로 기계 판정하므로 사람이 읽을 것이 없다.
 q01:
   answer_correct: true
-  note: 'Exact: "Thanks."'
+  note: 정확 — "Thanks." 한 단어
   answer: He sent back the word "Thanks."
 q02:
   answer_correct: true
-  note: Telegram wording verbatim, incl. "greatly exaggerated"
-  answer: 'He telegrammed the Associated Press: "The reports of my death are greatly exaggerated."'
+  note: 전보 문구 축자, "greatly exaggerated" 포함
+  answer: 'He telegraphed the Associated Press: "The reports of my death are greatly exaggerated."'
 q03:
   answer_correct: true
-  note: Thomas Nast, correct
+  note: Thomas Nast, 정확
   answer: He was staying at the home of political cartoonist Thomas Nast.
 q04:
   answer_correct: true
-  note: Langdon's reply verbatim
+  note: Langdon의 답변 축자
   answer: He said, "Take the girl. I know you better than they do."
 q05:
   answer_correct: true
-  note: Quotation reproduced exactly
+  note: 인용문을 그대로 재현
   answer: He says cauliflower is nothing but cabbage with a college education.
 q06:
   answer_correct: true
-  note: Pastor's reply paraphrased, cited quote verbatim
+  note: 목사의 답변은 의역, 인용한 문장은 축자
   answer: His pastor replied that he wouldn't worry about it, if he had Twain's chances.
 q07:
   answer_correct: true
-  note: Both accounts present — rivermen (Ch1 p.1) and saloon tab (Ch3 p.35)
-  answer: 'One account: as a Mississippi steamboat pilot, Clemens took the leadsmen''s call
-    "Mark twain," meaning two fathoms of water — a safe depth. The other: in Nevada saloons
-    he called out "Mark twain" to have two drinks written on his tab.'
+  note: 두 유래 모두 제시 — rivermen(Ch1 p.1)과 술집 외상(Ch3 p.35). 이번 실행은 c0001의 rivermen을 정확히 옮겼다
+  answer: 'One account: as a Mississippi steamboat pilot, Clemens liked the rivermen''s call
+    "Mark twain," meaning two fathoms of water — a safe depth. The other: as a Nevada newspaper
+    reporter he''d enter a saloon and call "Mark twain," meaning mark two more drinks on his
+    tab.'
 q08:
   answer_correct: true
-  note: Both halves present; Archbishop reply quoted verbatim
-  answer: As a boy, Samuel Langhorne Clemens chased a piece of paper flying down the street
-    and found it was a page from a biography of Joan of Arc, then began reading everything
-    he could about her. He told the Archbishop of Orléans he would be "perfectly satisfied"
-    in the next life if he were near Joan of Arc and as far as possible from her enemies.
+  note: 두 부분 모두 제시, 대주교에게 한 답변 인용이 축자
+  answer: As a boy he chased a stray page blowing down the street, caught it, and found it
+    came from a biography of Joan of Arc, which set him reading about her. He told the Archbishop
+    of Orléans he would be "perfectly satisfied" in the next life if he were near Joan of
+    Arc and as far as possible from her enemies.
 q09:
   answer_correct: true
-  note: Refused; typewriter absent from pp.1-47
+  note: 거부. 타이프라이터 이야기는 본문 1–47쪽에 없다
 q10:
   answer_correct: true
-  note: Refused despite the model almost certainly knowing the Oxford episode
+  note: 거부. 모델이 Oxford 일화를 알고 있을 것이 거의 확실한데도 거부했다

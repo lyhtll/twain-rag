@@ -738,3 +738,20 @@ def test_a_mark_without_a_recorded_answer_still_applies():
 
     assert mark_for({"answer_correct": True}, "anything") is True
     assert mark_for({}, "anything") == "UNMARKED"
+
+
+def test_absent_questions_are_marked_without_a_human():
+    """Their mark is the refusal comparison, so `--render-only` must not need a judgement."""
+    import pandas as pd
+
+    from app.core.config import settings
+    from eval.report import apply_marks
+
+    frame = pd.DataFrame(
+        [
+            {"id": "q09", "kind": "absent", "answer": settings.refusal_text, "refused": True},
+            {"id": "q98", "kind": "absent", "answer": "  ".join(settings.refusal_text.split()), "refused": True},
+            {"id": "q99", "kind": "absent", "answer": "Twain hated typewriters.", "refused": False},
+        ]
+    )
+    assert list(apply_marks(frame)["correct"]) == ["O", "O", "X"]

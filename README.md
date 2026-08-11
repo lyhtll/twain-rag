@@ -1,117 +1,45 @@
 # Mark Twain QA Bot
 
-A minimal RAG system whose only knowledge source is one ebook — *Mark Twain Anecdotes and
-Quotes* (David Bruce, 2008). It answers from retrieved excerpts only, cites the chunk
-title and printed page for every claim, and answers `Not in this book.` when the book
-does not cover the question.
+전자책 한 권 — *Mark Twain Anecdotes and Quotes* (David Bruce, 2008) — **만을** 지식원으로
+쓰는 RAG QA 시스템. 검색된 발췌만 근거로 답하고 청크 제목·쪽수·인용 문장을 함께 보여주며,
+책에 없는 질문에는 `Not in this book.` 이라고 답한다.
 
-The PDF is **not** in this repository. It is distributed for non-commercial use in
-unmodified form, so only code and processing scripts are committed — download it yourself
-and put it at `data/book.pdf`.
+설계 판단과 실패 분석은 `docs/NOTES.md` 에 있다.
 
-## Reproduce
+## 준비
+
+PDF는 이 저장소에 **없다.** 비상업적 용도로 원형 그대로 배포되는 자료라 코드만 커밋했다.
+직접 받아서 `data/book.pdf` 에 둔다.
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
-
-# 1. PDF -> chunks -> indexes. Regenerates data/ , index/ and docs/CHUNK_STATS.md
-#    from scratch. No credential needed.
-.venv/bin/python -m scripts.ingest data/book.pdf
-
-# 2. Ask. Credential needed — see below.
-.venv/bin/uvicorn main:app          # then open http://localhost:8000
+cp .env.example .env
+claude setup-token     # 출력된 토큰을 .env 의 CLAUDE_CODE_OAUTHTOKEN= 에 붙여넣는다
+unset ANTHROPIC_API_KEY   # 둘 다 있으면 API 키가 OAuth 토큰을 이긴다
 ```
+
+토큰 대신 Messages API 종량제로 쓰려면 `.env` 에 `answer_provider=api` 와
+`ANTHROPIC_API_KEY=sk-ant-...` 를 넣는다.
+
+## 실행
 
 ```bash
-curl -sX POST localhost:8000/ask -H 'content-type: application/json' \
-     -d '{"text":"At whose home was Mark Twain staying when he stopped all the clocks?"}'
+.venv/bin/python -m scripts.ingest data/book.pdf   # PDF -> 청크 -> 색인
+.venv/bin/uvicorn main:app                         # http://localhost:8000
 ```
 
-```json
-{"text": "He was staying at the home of political cartoonist Thomas Nast.",
- "sources": [{"chunk_id": "c0029", "title": "Noisy Clocks", "page": "Ch.1, p.9",
-              "quote": "During the night, Mr. Twain was bothered by the sounds of the Nast family’s clocks…"}],
- "refused": false}
-```
+색인은 저장소에 없으므로 첫 명령을 건너뛸 수 없다. `data/`, `index/`,
+`docs/CHUNK_STATS.md` 가 이 단계에서 만들어진다.
 
-## Credential
+**질문은 영어로 한다.** 임베딩이 영어 전용(`bge-small-en-v1.5`)이라 한국어 질의는 검색
+단계에서 실패한다 — 이유는 `docs/NOTES.md` §3.
 
-Answer generation needs one. **Ingest, retrieval and the tests need none** — you can
-regenerate every artifact and run the whole test suite without any credential.
-
-Default path bills to a Claude Pro/Max subscription:
+## 평가와 테스트
 
 ```bash
-claude setup-token            # prints a one-year OAuth token; it is not saved for you
-cp .env.example .env          # paste it as CLAUDE_CODE_OAUTHTOKEN=
-unset ANTHROPIC_API_KEY       # it outranks the OAuth token if both are set
+.venv/bin/python -m eval.report        # 10문항 실행 -> docs/EVAL.md
+.venv/bin/python -m pytest -q          # 47개, 약 0.5초
 ```
 
-To pay per token through the Messages API instead, put this in `.env`:
-
-```
-answer_provider=api
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-Both paths go through the same `AnswerAgent`; only the transport differs. See
-`app/agents/claude_code_client.py` for what the subscription path has to compensate for.
-
-## Evaluate
-
-```bash
-.venv/bin/python -m eval.report        # runs eval/questions.yaml -> docs/EVAL.md
-.venv/bin/python -m scripts.compare_fusion   # RRF vs CC, retrieval only, no model calls
-```
-
-`eval/questions.yaml` was written and committed **before** any chunking, retrieval or
-answer code existed (`git log --oneline eval/questions.yaml`) and has not been edited
-since. Human judgements live in `eval/marks.yaml`; `docs/EVAL.md` is generated from both
-and is never hand-edited.
-
-## Test
-
-```bash
-.venv/bin/python -m pytest -q          # 45 tests, ~0.4s
-```
-
-The suite runs with **no credential, no PDF and no embedding model**. Dependencies are
-injected through `Protocol`s (`app/rag/indexer.py`, `app/agents/answer_agent.py`) and API
-tests stub the FastAPI dependencies, so nothing downloads a model or opens a socket.
-
-## How it works
-
-```
-PDF ─ PyMuPDF (font weight, printed page numbers)
-    └ chapter-aware chunking ─ data/chunks.jsonl ─ BM25 + bge-small ─ index/
-
-question ─ BM25 top-10 ┐
-                       ├ RRF ─ collapse duplicates ─ top-3 ─ claude ─ verified citations
-           dense top-10┘
-```
-
-- **Chunking is per chapter** because the three chapters are structurally different:
-  Ch1 has bold anecdote headings, Ch2 has no headings at all, Ch3 uses bold questions.
-  Measured chunk lengths differ 20x between them. `docs/NOTES.md` §1.
-- **Retrieval is hybrid** because the halves fail differently — BM25 carries rare nouns,
-  the embeddings carry paraphrase. `docs/NOTES.md` §4 has a measured case of each.
-- **Citations are built in two steps.** The model returns only a chunk id and a verbatim
-  quote; the title and page come from the chunk record, so they cannot be invented. A
-  citation is dropped unless it names a supplied excerpt *and* quotes a sentence really in
-  it. An answer with no surviving citation raises rather than shipping.
-- **No vector DB, no RAG framework.** 187 chunks × 384 dims is 287KB; brute-force cosine
-  is exact and microseconds. `docs/NOTES.md` §6 lists what was considered and rejected.
-
-## Deliverables
-
-| | |
-|---|---|
-| `docs/CHUNK_STATS.md` | chunk counts per chapter, lengths, duplicate links — generated |
-| `docs/EVAL.md` | the 10-question table — generated |
-| `docs/NOTES.md` | chunking rationale, two diagnosed failures, the one next fix |
-| `agent_docs/` | the working notes the implementation was driven from |
-
-## Layout
-
-Follows the `app/core` + `app/models` + `app/rag` + `app/agents` + `app/api` split, with
-`*Agent` reserved for the one class that calls an LLM. See `CLAUDE.md`.
+`docs/EVAL.md` 와 `docs/CHUNK_STATS.md` 는 생성물이므로 손으로 고치지 않는다.
+색인·검색·테스트는 자격증명 없이 돌아간다 — 답변 생성에만 필요하다.
