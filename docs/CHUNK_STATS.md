@@ -1,6 +1,6 @@
 # 청크 통계
 
-`python -m scripts.ingest data/book.pdf` 로 생성된다. 손으로 고치지 않는다.
+`python -m scripts.ingest data/book.pdf` 로 생성된다.
 
 **총 청크 수: 187**
 

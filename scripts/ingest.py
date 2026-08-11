@@ -24,7 +24,7 @@ def write_stats(chunks: list[Chunk], pairs: int, path: Path = Path("docs/CHUNK_S
     lines = [
         "# 청크 통계",
         "",
-        f"`python -m scripts.ingest {settings.book_path}` 로 생성된다. 손으로 고치지 않는다.",
+        f"`python -m scripts.ingest {settings.book_path}` 로 생성된다.",
         "",
         f"**총 청크 수: {len(chunks)}**",
         "",

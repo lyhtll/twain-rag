@@ -168,8 +168,8 @@ def write_report(frame: pd.DataFrame, path: Path = OUT) -> None:
     lines = [
         "# 10문항 평가",
         "",
-        "`python -m eval.report` 로 생성된다. 손으로 고치지 않는다 — 사람 판정은",
-        "`eval/marks.yaml` 에 적고 다시 생성한다.",
+        "`python -m eval.report` 로 생성된다. 사람 판정은 `eval/marks.yaml` 에 적고",
+        "다시 생성한다.",
         "",
         f"- **top-3 적중률: {hits}/{len(answerable)}** (답이 있는 문항 기준. `없음` 문항은 "
         "정답 청크가 없어 제외한다)",
