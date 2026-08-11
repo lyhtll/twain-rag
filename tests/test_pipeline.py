@@ -3,6 +3,9 @@
 Anything that needs the real book is a manual check (see docs/NOTES.md), not a test.
 """
 
+import json
+from contextlib import contextmanager
+
 import pytest
 
 from app.rag.extractor import PdfExtractor
@@ -147,7 +150,7 @@ def test_content_pages_raises_when_a_page_is_missing():
 
 # --------------------------------------------------------------------------- chunking
 
-from app.models.chunk import Chunk, Line, Page
+from app.models.chunk import Chunk, Hit, Line, Page
 from app.rag.chunker import Chunker, mark_duplicates
 
 
@@ -426,3 +429,186 @@ def test_doc_for_indexes_printed_titles_for_ch1_and_ch3():
     anecdote = _chunk("c1", 1, "body text")
     anecdote.title = "Steamboat Pilot"
     assert doc_for(anecdote) == "Steamboat Pilot\nbody text"
+
+
+# --------------------------------------------------- answering and citations
+
+from app.agents.answer_agent import AnswerAgent
+from app.models.agent import AnswerOut, Citation
+from app.models.schemas.ask import AskResponse
+
+
+class FakeMessages:
+    """Stands in for `anthropic.Anthropic().messages`. Records the request it was given."""
+
+    def __init__(self, out: AnswerOut) -> None:
+        self._out = out
+        self.request: dict | None = None
+
+    def parse(self, **kwargs):
+        self.request = kwargs
+        return type("Response", (), {"parsed_output": self._out, "stop_reason": "end_turn"})()
+
+
+QUOTE = "Cauliflower is nothing but cabbage with a college education."
+
+
+def _hit(chunk: Chunk) -> Hit:
+    return Hit(chunk=chunk, bm25_rank=1, dense_rank=1, fused=0.03)
+
+
+def _quote_chunk() -> Chunk:
+    chunk = _chunk("c0124", 2, QUOTE, page=29)
+    chunk.title = "Cauliflower is nothing but cabbage with…"
+    return chunk
+
+
+def test_prompt_carries_the_excerpts_and_the_grounding_rules():
+    agent = AnswerAgent(messages=FakeMessages(AnswerOut(text="x")))
+    prompt = agent.build_prompt("What is cauliflower?", [_hit(_quote_chunk())])
+    content = prompt["messages"][0]["content"]
+
+    assert QUOTE in content and 'id="c0124"' in content and 'pages="Ch.2, p.29"' in content
+    assert "ONLY the book excerpts" in prompt["system"]
+    assert settings.refusal_text in prompt["system"]
+    assert prompt["output_format"] is AnswerOut
+    # parse() merges output_format into output_config, so effort survives beside it.
+    assert prompt["output_config"] == {"effort": "low"}
+
+
+def test_ch2_excerpt_omits_its_derived_title():
+    """A Ch2 'title' is a slice of its own text — repeating it is prompt noise."""
+    agent = AnswerAgent(messages=FakeMessages(AnswerOut(text="x")))
+    content = agent.build_prompt("q", [_hit(_quote_chunk())])["messages"][0]["content"]
+    assert "title=" not in content
+
+    anecdote = _chunk("c0029", 1, "He stopped the clocks.", page=9)
+    anecdote.title = "Noisy Clocks"
+    content = agent.build_prompt("q", [_hit(anecdote)])["messages"][0]["content"]
+    assert 'title="Noisy Clocks"' in content
+
+
+def test_empty_retrieval_refusal_is_returned_verbatim():
+    agent = AnswerAgent(messages=FakeMessages(AnswerOut(text=settings.refusal_text)))
+    response, rejected = agent.answer("What about typewriters?", [])
+    assert response.refused is True
+    assert response.text == settings.refusal_text
+    assert response.sources == [] and rejected == []
+
+
+def test_citation_titles_and_pages_come_from_the_chunk_not_the_model():
+    out = AnswerOut(
+        text="Cabbage with a college education.",
+        citations=[Citation(chunk_id="c0124", quote=QUOTE)],
+    )
+    agent = AnswerAgent(messages=FakeMessages(out))
+    response, rejected = agent.answer("What is cauliflower?", [_hit(_quote_chunk())])
+    (source,) = response.sources
+    assert (source.title, source.page) == ("Cauliflower is nothing but cabbage with…", "Ch.2, p.29")
+    assert source.quote == QUOTE and rejected == []
+
+
+def test_citation_naming_an_excerpt_we_never_supplied_is_dropped():
+    out = AnswerOut(text="Answer.", citations=[
+        Citation(chunk_id="c9999", quote=QUOTE),
+        Citation(chunk_id="c0124", quote=QUOTE),
+    ])
+    agent = AnswerAgent(messages=FakeMessages(out))
+    response, rejected = agent.answer("q", [_hit(_quote_chunk())])
+    assert [s.chunk_id for s in response.sources] == ["c0124"]
+    assert [c.chunk_id for c in rejected] == ["c9999"]
+
+
+def test_a_quote_that_is_not_in_the_excerpt_is_dropped():
+    """This is the check that catches paraphrase-dressed-as-quotation."""
+    out = AnswerOut(text="Answer.", citations=[
+        Citation(chunk_id="c0124", quote="Cauliflower is basically educated cabbage."),
+        Citation(chunk_id="c0124", quote=QUOTE),
+    ])
+    agent = AnswerAgent(messages=FakeMessages(out))
+    response, rejected = agent.answer("q", [_hit(_quote_chunk())])
+    assert len(response.sources) == 1 and len(rejected) == 1
+    assert rejected[0].quote.startswith("Cauliflower is basically")
+
+
+def test_straight_quotes_retyped_from_curly_ones_still_verify():
+    """The book prints ’ and —; a model retyping them as ASCII is quoting, not forging."""
+    chunk = _chunk("c0087", 1, "The reports of my death are greatly exaggerated — Mr. Twain’s telegram.")
+    out = AnswerOut(text="He wired that.", citations=[
+        Citation(chunk_id="c0087", quote="greatly exaggerated - Mr. Twain's telegram."),
+    ])
+    response, rejected = AnswerAgent(messages=FakeMessages(out)).answer("q", [_hit(chunk)])
+    assert rejected == [] and len(response.sources) == 1
+
+
+def test_an_answer_with_no_surviving_citation_raises():
+    """An uncited answer is not an answer — fail loudly instead of shipping it."""
+    out = AnswerOut(text="Twain won a Nobel Prize.", citations=[Citation(chunk_id="c9999", quote="x")])
+    agent = AnswerAgent(messages=FakeMessages(out))
+    with pytest.raises(ValueError, match="none of which survived"):
+        agent.answer("q", [_hit(_quote_chunk())])
+
+
+# ------------------------------------------------------------------- api wiring
+
+
+@contextmanager
+def _client(out: AnswerOut, chunk: Chunk):
+    """TestClient with both dependencies stubbed.
+
+    Every dependency must be overridden even for tests that only exercise request
+    validation: FastAPI resolves dependencies for the route, so a missing override here
+    would construct the real agent (needing an API key) and load the real embedding model.
+    """
+    from fastapi.testclient import TestClient
+
+    from app.core.dependencies import get_answer_agent, get_retriever
+    from main import app
+
+    class StubRetriever:
+        def search(self, question, **kwargs):
+            return [_hit(chunk)]
+
+    app.dependency_overrides[get_retriever] = lambda: StubRetriever()
+    app.dependency_overrides[get_answer_agent] = lambda: AnswerAgent(messages=FakeMessages(out))
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_ask_endpoint_returns_a_json_object_not_an_array(tmp_path, monkeypatch):
+    """AskResponse must be a BaseModel: pydantic serialises a NamedTuple positionally,
+    which would send ["...", [[...]], false] and force the page to parse by index."""
+    monkeypatch.setattr("app.observability.settings.runs_dir", tmp_path)
+    out = AnswerOut(text="Cabbage with a college education.",
+                    citations=[Citation(chunk_id="c0124", quote=QUOTE)])
+    with _client(out, _quote_chunk()) as client:
+        body = client.post("/ask", json={"text": "What is cauliflower?"}).json()
+
+    assert isinstance(body, dict), body
+    assert set(body) == {"text", "sources", "refused"}
+    assert body["sources"][0]["page"] == "Ch.2, p.29"
+    assert body["refused"] is False
+
+
+def test_ask_rejects_an_empty_question():
+    with _client(AnswerOut(text="x"), _quote_chunk()) as client:
+        assert client.post("/ask", json={"text": ""}).status_code == 422
+
+
+def test_log_run_records_both_rank_lists_and_rejected_citations(tmp_path):
+    from app.observability import log_run
+
+    chunk = _quote_chunk()
+    hit = Hit(chunk=chunk, bm25_rank=1, dense_rank=None, fused=0.0164)
+    response = AskResponse(text="answer", sources=[], refused=False)
+    log_run("q", [hit], response, [Citation(chunk_id="c9999", quote="nope")],
+            directory=tmp_path, question_id="q05")
+
+    (path,) = list(tmp_path.iterdir())
+    record = json.loads(path.read_text(encoding="utf-8").strip())
+    assert record["question_id"] == "q05"
+    assert record["retrieved"][0]["bm25_rank"] == 1
+    assert record["retrieved"][0]["dense_rank"] is None, "which side missed must be visible"
+    assert record["rejected_citations"][0]["chunk_id"] == "c9999"
