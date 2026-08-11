@@ -97,19 +97,29 @@ def _lines(page: Any) -> list[Line]:
             x0, y0, x1, _ = line["bbox"]
             fragments.append((y0, x0, x1, any("Bold" in s.get("font", "") for s in spans), text))
 
-    fragments.sort(key=lambda f: (f[0], f[1]))  # baseline, then left-to-right
-    out: list[Line] = []
-    for y0, _, x1, bold, text in fragments:
-        if out and abs(y0 - out[-1].y_top) <= SAME_LINE_TOLERANCE:
-            prev = out[-1]
-            out[-1] = Line(
-                text=f"{prev.text} {text}",
-                bold=prev.bold or bold,
-                y_top=prev.y_top,
-                x_right=max(prev.x_right, x1),
-            )
+    # Cluster by baseline first, *then* order within the line. Sorting by (y, x) up
+    # front would misplace a fragment whose baseline is off by a fraction of a point:
+    # at y=269.90 it sorts after everything at y=269.87 and lands at the end of the
+    # line instead of its x position.
+    fragments.sort(key=lambda f: f[0])
+    clusters: list[list[tuple[float, float, float, bool, str]]] = []
+    for frag in fragments:
+        if clusters and abs(frag[0] - clusters[-1][0][0]) <= SAME_LINE_TOLERANCE:
+            clusters[-1].append(frag)
         else:
-            out.append(Line(text=text, bold=bold, y_top=y0, x_right=x1))
+            clusters.append([frag])
+
+    out: list[Line] = []
+    for cluster in clusters:
+        cluster.sort(key=lambda f: f[1])
+        out.append(
+            Line(
+                text=" ".join(f[4] for f in cluster),
+                bold=any(f[3] for f in cluster),
+                y_top=cluster[0][0],
+                x_right=max(f[2] for f in cluster),
+            )
+        )
     return out
 
 

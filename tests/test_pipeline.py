@@ -9,9 +9,13 @@ from app.rag.extractor import PdfExtractor
 
 
 class FakePage:
-    """Stands in for a pymupdf.Page. Rows are (text, bold, y_top, x_right)."""
+    """Stands in for a pymupdf.Page.
 
-    def __init__(self, rows: list[tuple[str, bool, float, float]]) -> None:
+    Rows are (text, bold, y_top, x_left, x_right). x_left is real geometry here, not
+    padding: the extractor orders same-baseline fragments by it.
+    """
+
+    def __init__(self, rows: list[tuple[str, bool, float, float, float]]) -> None:
         self._rows = rows
 
     def get_text(self, kind: str, flags: int | None = None) -> dict:
@@ -21,12 +25,17 @@ class FakePage:
                 {
                     "lines": [
                         {
-                            "bbox": (0.0, y, 0.0, xr),
+                            "bbox": (xl, y, xr, y + 12.0),
                             "spans": [
-                                {"text": text, "font": "ABCDEF+TimesNewRomanPS-BoldMT" if bold else "ABCDEF+TimesNewRomanPSMT"}
+                                {
+                                    "text": text,
+                                    "font": "ABCDEF+TimesNewRomanPS-BoldMT"
+                                    if bold
+                                    else "ABCDEF+TimesNewRomanPSMT",
+                                }
                             ],
                         }
-                        for text, bold, y, xr in self._rows
+                        for text, bold, y, xl, xr in self._rows
                     ]
                 }
             ]
@@ -48,15 +57,15 @@ def _body_page(printed: int) -> FakePage:
     """A content page: numeric header on top, then a bold heading and body text."""
     return FakePage(
         [
-            (str(printed), False, 36.4, 220.0),
-            ("Spelling", True, 94.2, 119.3),
-            ("When Samuel Langhorne Clemens was a schoolboy, he", False, 116.0, 363.0),
+            (str(printed), False, 36.4, 200.0, 220.0),
+            ("Spelling", True, 94.2, 72.0, 119.3),
+            ("When Samuel Langhorne Clemens was a schoolboy, he", False, 116.0, 72.0, 363.0),
         ]
     )
 
 
 def _front_matter() -> FakePage:
-    return FakePage([("TABLE OF CONTENTS", False, 72.3, 300.0)])
+    return FakePage([("TABLE OF CONTENTS", False, 72.3, 100.0, 300.0)])
 
 
 def test_page_header_is_parsed_and_stripped():
@@ -79,7 +88,7 @@ def test_bold_flag_marks_headings_only():
 
 
 def test_lines_are_sorted_top_to_bottom():
-    doc = FakeDoc([FakePage([("second", False, 200.0, 300.0), ("first", False, 100.0, 300.0)])])
+    doc = FakeDoc([FakePage([("second", False, 200.0, 72.0, 300.0), ("first", False, 100.0, 72.0, 300.0)])])
     page = PdfExtractor(doc=doc).parse()[0]
     assert [ln.text for ln in page.lines] == ["first", "second"]
 
@@ -94,10 +103,10 @@ def test_word_fragments_on_one_baseline_are_merged():
         [
             FakePage(
                 [
-                    ("of", False, 269.87, 273.8),  # deliberately out of x order
-                    ("Humorist", False, 269.87, 120.3),
-                    ("Mark", False, 269.9, 159.6),  # 0.03pt off the baseline
-                    ("Huckleberry Finn, once stayed at the home", False, 283.79, 363.0),
+                    ("of", False, 269.87, 260.8, 273.8),  # deliberately out of x order
+                    ("Humorist", False, 269.87, 72.0, 120.3),
+                    ("Mark", False, 269.9, 130.6, 159.6),  # 0.03pt off the baseline
+                    ("Huckleberry Finn, once stayed at the home", False, 283.79, 72.0, 363.0),
                 ]
             )
         ]
@@ -111,7 +120,7 @@ def test_word_fragments_on_one_baseline_are_merged():
 
 
 def test_bold_survives_a_merge():
-    doc = FakeDoc([FakePage([("What was Mark", True, 100.0, 200.0), ("Twain's", False, 100.0, 260.0)])])
+    doc = FakeDoc([FakePage([("What was Mark", True, 100.0, 72.0, 200.0), ("Twain's", False, 100.0, 205.0, 260.0)])])
     page = PdfExtractor(doc=doc).parse()[0]
     assert page.lines[0].bold is True
 
