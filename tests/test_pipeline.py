@@ -281,3 +281,131 @@ def test_unrelated_chunks_are_not_linked():
     a = _chunk("c1", 1, "A short anecdote about a cat and a hot stove lid.")
     b = _chunk("c2", 3, f"{FILLER} nothing in common here {FILLER}")
     assert mark_duplicates([a, b]) == 0
+
+
+# ------------------------------------------------------- indexing and retrieval
+
+import numpy as np
+
+from app.core.config import settings
+from app.rag.indexer import Embedder, Index
+from app.rag.retriever import HybridRetriever, collapse_duplicates, fuse
+
+
+class FakeEncoder:
+    """Deterministic stand-in for sentence-transformers.
+
+    Each text maps to a unit vector from a hash, so similarity is stable but arbitrary —
+    enough to exercise wiring and row alignment without downloading a model. Records the
+    strings it was handed so the query-prefix asymmetry can be asserted.
+    """
+
+    def __init__(self) -> None:
+        self.seen: list[str] = []
+
+    def encode(self, sentences: list[str], normalize_embeddings: bool) -> np.ndarray:
+        assert normalize_embeddings is True, "cosine == dot product depends on this"
+        self.seen.extend(sentences)
+        out = []
+        for text in sentences:
+            rng = np.random.default_rng(abs(hash(text)) % (2**32))
+            vec = rng.normal(size=8).astype(np.float32)
+            out.append(vec / np.linalg.norm(vec))
+        return np.array(out, dtype=np.float32)
+
+
+def test_embedder_prefixes_the_query_but_not_the_passages():
+    encoder = FakeEncoder()
+    embedder = Embedder(model=encoder)
+    embedder.embed_passages(["a passage"])
+    embedder.embed_query("a question")
+    assert encoder.seen == ["a passage", settings.query_prefix + "a question"]
+
+
+def _corpus() -> list[Chunk]:
+    return [
+        _chunk("c1", 1, "A cat that sits on a hot stove lid will not sit on a cold one."),
+        _chunk("c2", 2, "Cauliflower is nothing but cabbage with a college education."),
+        _chunk("c3", 3, "Rivermen measuring two fathoms called out mark twain."),
+    ]
+
+
+def test_index_round_trip_keeps_rows_aligned_with_ids(tmp_path):
+    """The regression that matters most: misaligned rows cite the wrong chunk silently."""
+    chunks = _corpus()
+    built = Index.build(chunks, embedder=Embedder(model=FakeEncoder()))
+    built.save(tmp_path)
+
+    chunks_file = tmp_path / "chunks.jsonl"
+    from app.rag.indexer import save_chunks
+
+    save_chunks(chunks, chunks_file)
+    loaded = Index.load(tmp_path, chunks_path=chunks_file)
+
+    assert loaded._ids == [c.id for c in chunks]
+    np.testing.assert_allclose(loaded._embeddings, built._embeddings)
+    for i, chunk_id in enumerate(loaded._ids):
+        np.testing.assert_allclose(loaded._embeddings[i], built._embeddings[i]), chunk_id
+
+
+def test_index_rejects_an_id_row_count_mismatch():
+    with pytest.raises(ValueError, match="2 ids but 1 embedding rows"):
+        Index(chunks=_corpus()[:2], bm25=None, embeddings=np.zeros((1, 8), np.float32), ids=["c1", "c2"])
+
+
+def test_index_load_rejects_chunks_from_a_different_run(tmp_path):
+    from app.rag.indexer import save_chunks
+
+    chunks = _corpus()
+    Index.build(chunks, embedder=Embedder(model=FakeEncoder())).save(tmp_path)
+    chunks_file = tmp_path / "chunks.jsonl"
+    save_chunks(chunks[:2], chunks_file)  # index names c3; these chunks do not
+    with pytest.raises(ValueError, match="different runs"):
+        Index.load(tmp_path, chunks_path=chunks_file)
+
+
+def test_bm25_only_returns_chunks_that_share_a_token():
+    index = Index.build(_corpus(), embedder=Embedder(model=FakeEncoder()))
+    assert index.search_bm25("cauliflower", 10) == ["c2"]
+    assert index.search_bm25("xyzzy", 10) == []
+
+
+def test_rrf_rewards_appearing_in_both_lists():
+    fused = fuse(["a", "b"], ["c", "a"], method="rrf", k=60)
+    assert fused[0][0] == "a", "in both lists at rank 1 and 2"
+    assert {cid for cid, _ in fused} == {"a", "b", "c"}, "single-list ids are still candidates"
+
+
+def test_cc_fusion_is_available_for_the_day5_comparison():
+    fused = fuse(["a", "b", "c"], ["c", "b", "a"], method="cc", weight=0.5)
+    assert dict(fused)["b"] == pytest.approx(0.5), "middle of both lists"
+    with pytest.raises(ValueError, match="unknown fusion method"):
+        fuse([], [], method="nope")
+
+
+def test_collapse_drops_a_duplicate_but_keeps_unrelated_chunks():
+    ch1_a = _chunk("a1", 1, "Profanity anecdote")
+    ch1_b = _chunk("b1", 1, "Beds anecdote")
+    ch3 = _chunk("x3", 3, "A block retelling both")
+    ch3.duplicates = ["a1", "b1"]
+    ch1_a.duplicates = ["x3"]
+    ch1_b.duplicates = ["x3"]
+    by_id = {c.id: c for c in (ch1_a, ch1_b, ch3)}
+
+    # The Ch3 block outranks both copies -> both are dropped against it.
+    assert [i for i, _ in collapse_duplicates([("x3", 3.0), ("a1", 2.0), ("b1", 1.0)], by_id)] == ["x3"]
+    # Two unrelated Ch1 anecdotes are not duplicates of each other, so both survive.
+    assert [i for i, _ in collapse_duplicates([("a1", 3.0), ("b1", 2.0)], by_id)] == ["a1", "b1"]
+
+
+def test_retriever_records_which_side_found_each_hit():
+    """Both ranks are kept so failure analysis can say which retriever missed."""
+    index = Index.build(_corpus(), embedder=Embedder(model=FakeEncoder()))
+    retriever = HybridRetriever(index, embedder=Embedder(model=FakeEncoder()))
+    hits = retriever.search("cauliflower", top_k=3, candidates=10)
+
+    by_id = {h.chunk.id: h for h in hits}
+    assert by_id["c2"].bm25_rank == 1, "the only chunk sharing the token"
+    others = [h for h in hits if h.chunk.id != "c2"]
+    assert all(h.bm25_rank is None for h in others), "BM25 found nothing else"
+    assert all(h.dense_rank is not None for h in others), "dense ranks everything"

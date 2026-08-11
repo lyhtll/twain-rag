@@ -3,7 +3,6 @@
     python -m scripts.ingest data/book.pdf
 """
 
-import json
 import statistics as st
 import sys
 from collections import Counter
@@ -13,22 +12,9 @@ from app.core.config import settings
 from app.models.chunk import Chunk
 from app.rag.chunker import CHAPTER_RANGES, Chunker, mark_duplicates
 from app.rag.extractor import PdfExtractor
+from app.rag.indexer import Index, save_chunks
 
 CHAPTER_NAMES = {1: "Anecdotes", 2: "Quotations", 3: "His Life"}
-
-
-def save_chunks(chunks: list[Chunk], path: Path = settings.chunks_path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as fh:
-        for chunk in chunks:
-            fh.write(chunk.model_dump_json() + "\n")
-
-
-def load_chunks(path: Path = settings.chunks_path) -> list[Chunk]:
-    if not path.exists():
-        raise FileNotFoundError(f"{path} is missing — run: python -m scripts.ingest data/book.pdf")
-    with path.open(encoding="utf-8") as fh:
-        return [Chunk.model_validate_json(line) for line in fh if line.strip()]
 
 
 def write_stats(chunks: list[Chunk], pairs: int, path: Path = Path("docs/CHUNK_STATS.md")) -> None:
@@ -103,18 +89,22 @@ def write_stats(chunks: list[Chunk], pairs: int, path: Path = Path("docs/CHUNK_S
 
 def main(pdf: Path) -> None:
     pages = PdfExtractor(path=pdf).content_pages()
-    print(f"[1/3] extracted {len(pages)} content pages (printed 1–{pages[-1].printed})")
+    print(f"[1/4] extracted {len(pages)} content pages (printed 1–{pages[-1].printed})")
 
     chunks = Chunker().chunk(pages)
     per = Counter(c.chapter for c in chunks)
-    print(f"[2/3] chunked: {' / '.join(f'Ch{c} {per[c]}' for c in sorted(per))} = {len(chunks)}")
+    print(f"[2/4] chunked: {' / '.join(f'Ch{c} {per[c]}' for c in sorted(per))} = {len(chunks)}")
 
     pairs = mark_duplicates(chunks)
-    print(f"[3/3] near-duplicate pairs: {pairs}")
+    print(f"[3/4] near-duplicate pairs: {pairs}")
 
     save_chunks(chunks)
     write_stats(chunks, pairs)
-    print(f"wrote {settings.chunks_path} and docs/CHUNK_STATS.md")
+    print(f"[4/4] wrote {settings.chunks_path} and docs/CHUNK_STATS.md")
+
+    index = Index.build(chunks)
+    index.save()
+    print(f"      built index in {settings.index_dir}/ ({len(chunks)} chunks)")
 
 
 if __name__ == "__main__":

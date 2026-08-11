@@ -200,6 +200,34 @@ that could not be distinguished from a retrieval-design error.
 `HybridRetriever` takes the `Index` in its constructor. It must never call `Index.load()`
 itself — that would reload a 133MB model per request.
 
+### Measured on day 3: the two retrievers fail differently, as designed
+
+`"What does Twain say cauliflower is?"` is the clearest case. The dense side ranks Ch1
+'Name' first and does not return the cauliflower quote in its top 10; BM25 puts it first.
+Diagnosis, in order:
+
+- the embedding matrix is healthy (every row norm 1.0, pairwise cosine mean 0.52 over
+  0.22–0.985 — a degenerate matrix would sit near 1.0 everywhere);
+- the dense side ranks the quote **first** for `"cauliflower"` alone and for the
+  quote's own wording, so it is not blind to the content;
+- the query prefix is not the cause (prefixed and unprefixed query vectors are 0.983
+  apart in cosine and both fail).
+
+The cause is the question framing: in a seven-word question the one rare content word is
+outweighed by the interrogative shape, and Ch3's titles *are* questions, so
+question-shaped queries pull Ch3 in. BM25's IDF makes a rare noun decisive, which is
+exactly the complementarity the hybrid exists for.
+
+One consequence to note rather than fix: RRF rewards appearing in *both* lists, so a
+chunk ranked 2nd by BM25 and 3rd by dense can outrank a chunk ranked 1st by BM25 and
+absent from dense. On this query the correct chunk lands at rank 2 — inside top-3, so the
+answer is still grounded. Raising `candidates` or weighting the fusion would be tuning
+against a single observation; left alone.
+
+Day-3 chapter distribution over top-3 for five known questions: Ch1 9, Ch3 5, Ch2 1.
+Ch2 is 45% of the corpus and 7% of the retrieved slots, so **BM25's short-document bias
+is not crowding out top-3** — the opposite of the concern raised on day 1.
+
 **Never return an empty result to signal "not in the book."** A weak match is still a
 match; deciding the book does not cover something is the generation step's job. (This is
 why dynamic-k was rejected: dropping the third chunk can refuse a question that was
@@ -248,8 +276,11 @@ assignment §4 requires that a grader can check the passage in the book.
   questions are answered by top-3 spanning Ch1 and Ch3, which are not adjacent.
 - **Dynamic k / shortening the evidence** — a bonus item, but it can drop the chunk that
   held the answer and refuse an answerable question. Conflicts with R2 above.
-- **Parent-Child chunking** — Ch3 blocks are long, but embedding dilution has not been
-  measured. Reconsider only if day-3 retrieval shows Ch3 blocks missing top-3.
+- **Parent-Child chunking** — **closed on day 3 with evidence: the gate did not open.**
+  Ch3's longest blocks reach top-3 unaided — 4786, 4568 and 4096 chars all ranked 1st or
+  2nd on their own questions. No embedding dilution was observed, so the two-tier scheme
+  and everything it drags along (`parent_id`, `embedding=None`, `resolve_parents()`,
+  tests, a memo paragraph) stays unbuilt.
 - **HyDE** — generating a hypothetical answer to search with pulls the model's outside
   knowledge of Twain into retrieval, the opposite of this system's constraint.
 - **Cross-encoder reranking** — add only if a failure is diagnosed as a *ranking* problem.
