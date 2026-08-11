@@ -8,6 +8,7 @@ rules.
 
 import re
 
+from app.core.config import settings
 from app.models.chunk import Chunk
 
 _PUNCT = re.compile(r"[^a-z0-9]+")
@@ -45,5 +46,18 @@ def doc_for(chunk: Chunk) -> str:
     Pilot"). Ch2's title is a slice of its own text, so including it would count those
     characters twice and weight the opening clause. Index printed titles, never derived
     ones.
+
+    Ch2 gets an attribution frame instead. bge-small encodes sentence *form* as well as
+    content, and this book's chapters differ in form: an interrogative query moves toward
+    Ch1's narrative prose and Ch3's Q&A (mean cosine +0.18) while Ch2's bare aphorisms do
+    not move at all, so a question about a quotation lands far from its own answer.
+    Framing the quotation as reported speech closes that gap — measured on ten ad-hoc Ch2
+    questions, the median dense rank of the correct chunk goes 2 -> 1 and the worst cases
+    collapse (96 -> 1, 21 -> 3, 9 -> 1, 5 -> 1), with every Ch1/Ch3 rank unchanged.
+
+    Only the indexed string changes. `chunk.text`, the title, the page span and the quote
+    verification all read the printed text, so citations are untouched.
     """
-    return chunk.text if chunk.chapter == 2 else f"{chunk.title}\n{chunk.text}"
+    if chunk.chapter == 2:
+        return settings.ch2_index_prefix + chunk.text
+    return f"{chunk.title}\n{chunk.text}"

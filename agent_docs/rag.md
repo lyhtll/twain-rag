@@ -237,19 +237,45 @@ content, and this book's chapters differ in form** (narrative prose, terse aphor
 A question-shaped query is form-matched to Ch3 — where it helps, 0.629 and a correct top
 hit — and form-mismatched to a Ch2 aphorism, which is its own answer.
 
-Three fixes were considered and all rejected on measurement:
+Two fixes were rejected on measurement and one adopted:
 
-- **Widen `candidates` (10 -> 20/30)**: the correct chunk is dense rank **96 of 187**, so
-  the window would have to cover half the corpus. Not a truncation artifact.
-- **Lower RRF's `k`**: computed for this case, k=5 and k=1 do not flip the order; only
-  k=0 does, and that makes any single retriever's top hit unbeatable — a worse trade.
-- **Prepend a form-neutralising phrase to Ch2 indexed documents**: plausible, unmeasured,
-  and invented to fix one query. Deferred to the frozen eval on day 5, which will say
-  whether Ch2 questions fail *systematically*. Today's does not: the quote reaches top-3.
+- **Widen `candidates` (10 -> 20/30)** — rejected. The correct chunk is dense rank **96 of
+  187**, so the window would have to cover half the corpus. Not a truncation artifact.
+- **Lower RRF's `k`** — rejected. Computed for this case, k=5 and k=1 do not flip the
+  order; only k=0 does, and that makes any single retriever's top hit unbeatable, which is
+  a worse trade. (The flatness is real, though: at k=60 the gap between rank 1 and rank 10
+  is 1.15x while *appearing in a second list at all* is worth about 2x, so with ten
+  candidates per side RRF is decided by list membership more than by rank. k=60 was
+  calibrated for TREC-length lists, where ranks span 1..1000 and the term is 17x.)
+- **Frame Ch2 quotations as reported speech in the indexed document** — **adopted.**
+  `doc_for()` prefixes Ch2 with `settings.ch2_index_prefix` ("Mark Twain said: ").
 
-RRF is reporting the disagreement faithfully — one retriever ranks it 1st, the other 96th,
-so it lands 2nd overall. The outcome is still correct, and a hybrid surviving one
-retriever being badly wrong is the whole argument for having two.
+### Why the frame was adopted, and why on day 3
+
+Measured on **ten ad-hoc Ch2 questions written for this purpose** (not the frozen set) with
+the seven day-3 Ch1/Ch3 questions as a regression guard:
+
+| | Ch2 dense rank (median) | Ch2 top-3 | Ch1/Ch3 dense (median) | Ch1/Ch3 top-3 |
+|---|---|---|---|---|
+| baseline | 2 | 8/10 | 1 | 7/7 |
+| framed | **1** | **9/10** | 1 | 7/7 |
+
+Per-question, the frame rescues exactly the cases the mechanism predicts:
+96 -> 1, 21 -> 3, 9 -> 1, 5 -> 1, and the six already at rank 1-3 stay there. **No Ch1/Ch3
+rank changes at all.** This is not a fix for one query — the form mismatch applies
+structurally to all 84 Ch2 chunks, and the mechanism was measured before the fix was tried.
+
+The BM25 pollution risk was real and did not materialise: adding "said"/"twain" tokens to
+84 documents lowers their IDF rather than raising their influence, and the regression
+queries win on rare terms (clocks, telegram, cremated, Joan). Applying the frame to the
+embedding document only was measured too and is identical on every number, so a single
+`doc_for()` is kept — two indexes reading different text would make a fused rank
+unexplainable for no measured gain.
+
+**Timing matters for honesty here.** Doing this on day 3, before the frozen question set
+has ever been run, means the change cannot have been fitted to the eval. Deferring it to
+day 5 would have been the *less* defensible choice: by then q05's result is known, and any
+retrieval change is a change made after seeing the score.
 
 Day-3 chapter distribution over top-3 for five known questions: Ch1 9, Ch3 5, Ch2 1.
 Ch2 is 45% of the corpus and 7% of the retrieved slots, so **BM25's short-document bias

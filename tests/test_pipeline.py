@@ -290,6 +290,7 @@ import numpy as np
 from app.core.config import settings
 from app.rag.indexer import Embedder, Index
 from app.rag.retriever import HybridRetriever, collapse_duplicates, fuse
+from app.rag.text import doc_for
 
 
 class FakeEncoder:
@@ -409,3 +410,19 @@ def test_retriever_records_which_side_found_each_hit():
     others = [h for h in hits if h.chunk.id != "c2"]
     assert all(h.bm25_rank is None for h in others), "BM25 found nothing else"
     assert all(h.dense_rank is not None for h in others), "dense ranks everything"
+
+
+def test_doc_for_frames_ch2_quotations_but_leaves_citations_alone():
+    """The attribution frame is index-only: it must not leak into the cited text."""
+    quote = _chunk("c1", 2, "Cauliflower is nothing but cabbage with a college education.")
+    from app.rag.text import doc_for
+
+    assert doc_for(quote) == settings.ch2_index_prefix + quote.text
+    assert doc_for(quote).endswith(quote.text)
+    assert quote.text == "Cauliflower is nothing but cabbage with a college education."
+
+
+def test_doc_for_indexes_printed_titles_for_ch1_and_ch3():
+    anecdote = _chunk("c1", 1, "body text")
+    anecdote.title = "Steamboat Pilot"
+    assert doc_for(anecdote) == "Steamboat Pilot\nbody text"

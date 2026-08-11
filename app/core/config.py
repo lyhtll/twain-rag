@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # catches those.
     dup_min_ratio: float = 0.8
     ch2_title_chars: int = 40  # derived title length for untitled quotations
+    # Ch2 quotations are indexed with an attribution frame. Measured: it moves the median
+    # dense rank of a Ch2 answer from 2 to 1 and rescues the worst cases (96 -> 1, 21 -> 3,
+    # 9 -> 1), with no change to Ch1/Ch3 ranks. See agent_docs/rag.md.
+    ch2_index_prefix: str = "Mark Twain said: "
 
     refusal_text: str = "이 책에는 없습니다"
 
