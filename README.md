@@ -18,9 +18,6 @@ claude setup-token     # 출력된 토큰을 .env 의 CLAUDE_CODE_OAUTHTOKEN= �
 unset ANTHROPIC_API_KEY   # 둘 다 있으면 API 키가 OAuth 토큰을 이긴다
 ```
 
-토큰 대신 Messages API 종량제로 쓰려면 `.env` 에 `answer_provider=api` 와
-`ANTHROPIC_API_KEY=sk-ant-...` 를 넣는다.
-
 ## 실행
 
 ```bash
