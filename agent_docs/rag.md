@@ -51,6 +51,18 @@ page.get_text("dict", flags=TEXT_FLAGS)
 the number beats assuming a constant offset, and `content_pages()` raises if any of
 printed 1–47 is missing — a parsing regression must not silently shorten the book.
 
+### PyMuPDF also splits justified lines into words
+
+A widely-set justified line comes back as one entry per word: p.9 "Noisy Clocks" is 7
+fragments sharing `y=269.87`. Left as fragments, `x_right` describes a word instead of
+the line — and `x_right` is exactly the signal Ch2's paragraph detection reads. So
+`_lines()` merges fragments that share a baseline.
+
+**Cluster by baseline first, then order within the line.** Sorting by `(y, x)` in one
+pass misplaces a fragment whose baseline is off by a fraction of a point: at y=269.90 it
+sorts after everything at y=269.87 and lands at the end of the line, producing
+"Humorist of Mark". Real PDFs have sub-point baseline jitter.
+
 ### Headings are detected by font weight
 
 `span["font"]` contains `"Bold"`. This is why PyMuPDF is used and pypdf/pdftotext are
@@ -75,6 +87,20 @@ day 2 against the real book; the units are:
   question. `title` = the full question.
 - **Excluded** — front matter, both appendices, the `Chapter N: ...` all-caps lines, and
   Ch3's `Note: Some anecdotes are repeated...` notice.
+
+**Exclude before merging bold lines.** In Ch3 the chapter heading and the two-line
+`Note:` sit directly above the first question, all bold and consecutive. Merge first and
+they become one fake question.
+
+**Do not split paragraphs the book itself merged.** p.29 prints two unrelated aphorisms
+in a single paragraph ("There are lies, damned lies, and statistics. Against the assault
+of laughter nothing can stand."). Splitting on sentences would be re-editing the book;
+the printed paragraph stays the unit.
+
+Measured chunk counts (day 1): Ch1 92 at ~420 chars, Ch2 82 at ~89 chars, Ch3 9 at
+~2482 chars — about 183 total. The 20x spread across chapters is why one rule could not
+have worked, and why **Ch2's very short chunks are a day-3 watch item**: BM25 length
+normalization favours short documents, so Ch2 may crowd out top-3.
 
 `Chunk.page_start` / `page_end` come from the min/max printed page of the lines that fed
 the chunk — recorded during the page-by-page walk. There is no global text string and no
@@ -103,6 +129,10 @@ finds nothing.** Use the longest common subsequence of **words**, threshold 25 w
 ```python
 m = difflib.SequenceMatcher(None, a_words, b_words, autojunk=False).find_longest_match(...)
 ```
+
+Candidates are **Ch1 x Ch3 only** — 92 x 9 = 828 pairs. Ch1 x Ch2 was measured on day 1
+and shares no 8-word run with any quotation: Ch2 holds independent aphorisms, not retold
+anecdotes.
 
 `autojunk=False` is not optional. `SequenceMatcher` discards any element appearing more
 than `len(b)//100 + 1` times once `len(b) >= 200`. On character sequences that junks
