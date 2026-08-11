@@ -1,0 +1,122 @@
+# 10-question evaluation set — FROZEN.
+#
+# Written on day 1, before any chunking, retrieval, or answer code existed. Every
+# expected-evidence phrase below was verified against the extracted page text on the
+# same day: each `contains` string occurs on the page(s) listed and nowhere else, and
+# every `absent` question's keywords occur nowhere in printed pages 1-47.
+#
+# Do not edit questions or evidence after this file's first commit. If retrieval or
+# generation is wrong, fix the code. See agent_docs/eval.md.
+#
+# Evidence is identified by page + a distinctive phrase rather than by chunk title:
+# Ch2 has no printed titles (they are derived from the text), so a title-based key
+# would couple this file to a chunking implementation detail. A chunk satisfies an
+# option when page_start <= page <= page_end and the phrase is in its text.
+#
+# `evidence` is a list of required pieces. Each piece lists interchangeable `options`
+# — used where the book prints the same passage twice, so a duplicate-collapse that
+# keeps either copy still counts as a hit.
+
+- id: q01
+  kind: fact
+  question: "Someone sent Mark Twain a dollar and asked him to send a word in return. What word did he send back?"
+  answer: "Thanks"
+  evidence:
+    - options:
+        - page: 15
+          contains: "Please send me a word"
+  note: "Ch1 'Money'. Short anecdote, one chunk."
+
+- id: q02
+  kind: fact
+  question: "After reading newspaper reports that he had died, what telegram did Mark Twain send to the Associated Press?"
+  answer: "The reports of my death are greatly exaggerated."
+  evidence:
+    - options:
+        - page: 25
+          contains: "The reports of my death are greatly exaggerated"
+  note: "Ch1 'Reports of Mark Twain's Death'. Widely misquoted outside the book as 'greatly exaggerated' with 'rumours' — a model answering from memory may get the wording wrong."
+
+- id: q03
+  kind: fact
+  question: "At whose home was Mark Twain staying when he got up during the night and stopped all the clocks?"
+  answer: "Thomas Nast, the political cartoonist"
+  evidence:
+    - options:
+        - page: 9
+          contains: "political cartoonist Thomas Nast"
+  note: "Ch1 'Noisy Clocks'. This is the page whose justified line PyMuPDF splits into word fragments, so it also exercises line merging."
+
+- id: q04
+  kind: fact
+  question: "Olivia Langdon's father asked Mark Twain for character references, and the men he named said he was 'born to be hung'. What did her father say when he allowed the marriage anyway?"
+  answer: "Take the girl. I know you better than they do."
+  evidence:
+    - options:
+        - page: 15
+          contains: "Take the girl. I know you better than they do"
+        - page: 42
+          contains: "Take the girl. I know you better than they do"
+  note: "Printed twice — Ch1 '\"Take the Girl\"' and again inside Ch3's 1875-1885 section. Either copy counts, so this question also exercises duplicate collapse."
+
+- id: q05
+  kind: fact
+  question: "In this book's collection of Mark Twain quotations, what does he say cauliflower is?"
+  answer: "cabbage with a college education"
+  evidence:
+    - options:
+        - page: 29
+          contains: "Cauliflower is nothing but cabbage with a college education"
+  note: "Ch2 quotation. No printed title exists for it — tests that an untitled chunk can still be cited by page."
+
+- id: q06
+  kind: fact
+  question: "When Mark Twain said he wanted to be cremated, how did his pastor reply?"
+  answer: "I wouldn't worry about that, if I had your chances."
+  evidence:
+    - options:
+        - page: 26
+          contains: "I wouldn't worry about that, if I had your chances"
+  note: "Ch1 'Cremation'. Very short chunk (3 sentences) — checks that short chunks are retrievable."
+
+- id: q07
+  kind: multi
+  question: "This book gives two different accounts of how Samuel Clemens came to use the pen name 'Mark Twain'. What are both of them?"
+  answer: "(1) Rivermen measuring two fathoms of water called out 'mark twain'. (2) In a Nevada saloon he called 'mark twain' to have two more drinks written on his tab."
+  evidence:
+    - options:
+        - page: 1
+          contains: "the rivermen called out"
+        - page: 34
+          contains: "the rivermen called out"
+    - options:
+        - page: 35
+          contains: "Mark (or write down) two more drinks on my tab"
+  note: "Needs two chunks from different chapters. The riverman story is printed twice (Ch1 'Name' and Ch3 p.34), so the first piece accepts either; the saloon story appears only in Ch3 p.35. No single chunk answers this."
+
+- id: q08
+  kind: multi
+  question: "How did Mark Twain first come across Joan of Arc as a boy, and what did he say to the Archbishop of Orleans about being near her in the next life?"
+  answer: "As a boy he chased a windblown page that turned out to be from a biography of Joan of Arc. He told the Archbishop he would be 'perfectly satisfied' to be near Joan of Arc and as far as possible from her enemies."
+  evidence:
+    - options:
+        - page: 25
+          contains: "the page came from a biography of Joan of Arc"
+    - options:
+        - page: 26
+          contains: "Archbishop"
+  note: "Two adjacent but separate chunks, Ch1 'Joan of Arc' and 'More Joan of Arc'. The first half is only in one, the second half only in the other."
+
+- id: q09
+  kind: absent
+  question: "What does the book say about Mark Twain being the first author to submit a typewritten manuscript to a publisher?"
+  answer: "이 책에는 없습니다"
+  evidence: []
+  note: "A real and widely repeated Twain fact, so the model is likely to know it — but 'typewriter', 'typewritten', 'typing' and 'Remington' appear nowhere in printed pages 1-47. Answering it at all is a failure."
+
+- id: q10
+  kind: absent
+  question: "According to the book, how did Mark Twain react to receiving his honorary degree from Oxford in 1907?"
+  answer: "이 책에는 없습니다"
+  evidence: []
+  note: "Another well-known episode (he loved the scarlet gown). 'Oxford', 'honorary', 'degree', 'doctorate' and 'gown' appear nowhere in printed pages 1-47."
