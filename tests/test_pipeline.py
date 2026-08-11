@@ -612,3 +612,105 @@ def test_log_run_records_both_rank_lists_and_rejected_citations(tmp_path):
     assert record["retrieved"][0]["bm25_rank"] == 1
     assert record["retrieved"][0]["dense_rank"] is None, "which side missed must be visible"
     assert record["rejected_citations"][0]["chunk_id"] == "c9999"
+
+
+# ------------------------------------------- claude -p adapter (subscription path)
+
+from pathlib import Path
+
+from app.agents.claude_code_client import DENIED_TOOLS, ClaudeCodeMessages, _json_span
+
+
+class RecordingRunner:
+    """Captures the argv/cwd/env the adapter would hand to the subprocess."""
+
+    def __init__(self, result_text: str) -> None:
+        self._result = result_text
+        self.argv: list[str] = []
+        self.cwd: str = ""
+        self.env: dict[str, str] = {}
+        self.cwd_was_empty: bool | None = None
+
+    def __call__(self, argv, *, cwd, env, timeout):
+        self.argv, self.cwd, self.env = argv, cwd, env
+        self.cwd_was_empty = not any(Path(cwd).iterdir())
+        return json.dumps({"type": "result", "result": self._result, "is_error": False})
+
+
+def _valid_output() -> str:
+    return json.dumps({"text": "Cabbage with a college education.",
+                       "citations": [{"chunk_id": "c0124", "quote": QUOTE}]})
+
+
+def _prompt() -> dict:
+    agent = AnswerAgent(messages=FakeMessages(AnswerOut(text="x")))
+    return agent.build_prompt("What is cauliflower?", [_hit(_quote_chunk())])
+
+
+def test_adapter_runs_in_an_empty_directory(monkeypatch):
+    """The load-bearing guard: the harness can read files, so give it nothing to read.
+
+    Run inside the repository and the model could open data/chunks.jsonl or the PDF and
+    answer from the whole book, which would invalidate the only claim this project makes.
+    """
+    monkeypatch.setattr("app.agents.claude_code_client.settings.claude_code_oauth_token", "tok")
+    runner = RecordingRunner(_valid_output())
+    ClaudeCodeMessages(runner=runner).parse(**_prompt())
+
+    assert runner.cwd_was_empty is True
+    assert Path(runner.cwd).resolve() != Path.cwd().resolve()
+
+
+def test_adapter_denies_the_tools_an_empty_cwd_cannot_stop(monkeypatch):
+    monkeypatch.setattr("app.agents.claude_code_client.settings.claude_code_oauth_token", "tok")
+    runner = RecordingRunner(_valid_output())
+    ClaudeCodeMessages(runner=runner).parse(**_prompt())
+
+    assert "--disallowed-tools" in runner.argv
+    for tool in ("WebSearch", "WebFetch", "Read", "Bash"):
+        assert tool in runner.argv, tool
+    assert "--bare" not in runner.argv, "--bare ignores the OAuth credential"
+
+
+def test_adapter_keeps_the_api_key_out_of_the_subprocess(monkeypatch):
+    """ANTHROPIC_API_KEY outranks the OAuth token — leaving it set bills the API."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-should-not-be-passed")
+    monkeypatch.setattr("app.agents.claude_code_client.settings.claude_code_oauth_token", "tok")
+    runner = RecordingRunner(_valid_output())
+    ClaudeCodeMessages(runner=runner).parse(**_prompt())
+
+    assert "ANTHROPIC_API_KEY" not in runner.env
+    assert runner.env["CLAUDE_CODE_OAUTHTOKEN"] == "tok"
+
+
+def test_adapter_asks_for_the_schema_it_cannot_enforce(monkeypatch):
+    monkeypatch.setattr("app.agents.claude_code_client.settings.claude_code_oauth_token", "tok")
+    runner = RecordingRunner(_valid_output())
+    ClaudeCodeMessages(runner=runner).parse(**_prompt())
+
+    system = runner.argv[runner.argv.index("--system-prompt") + 1]
+    assert "chunk_id" in system and "quote" in system, "schema must be in the prompt"
+    assert "ONLY the book excerpts" in system, "the grounding rules must survive"
+    assert "--effort" in runner.argv and "low" in runner.argv
+
+
+def test_adapter_returns_a_validated_model(monkeypatch):
+    monkeypatch.setattr("app.agents.claude_code_client.settings.claude_code_oauth_token", "tok")
+    response = ClaudeCodeMessages(runner=RecordingRunner(_valid_output())).parse(**_prompt())
+    assert response.parsed_output.citations[0].chunk_id == "c0124"
+
+
+def test_adapter_survives_fenced_and_prefixed_json():
+    """Without schema enforcement, "reply with bare JSON" is a request, not a guarantee."""
+    body = _valid_output()
+    for wrapped in (body, f"```json\n{body}\n```", f"Here you go:\n{body}\nHope that helps."):
+        assert json.loads(_json_span(wrapped))["citations"][0]["chunk_id"] == "c0124"
+    with pytest.raises(ValueError, match="no JSON object"):
+        _json_span("I could not answer that.")
+
+
+def test_adapter_raises_without_a_token(monkeypatch):
+    monkeypatch.setattr("app.agents.claude_code_client.settings.claude_code_oauth_token", "")
+    monkeypatch.delenv("CLAUDE_CODE_OAUTHTOKEN", raising=False)
+    with pytest.raises(RuntimeError, match="claude setup-token"):
+        ClaudeCodeMessages(runner=RecordingRunner(_valid_output())).parse(**_prompt())

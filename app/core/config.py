@@ -6,7 +6,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    anthropic_api_key: str = ""
+    # "claude_code" bills answer generation to a Claude Pro/Max subscription by shelling
+    # out to `claude -p`; "api" uses the Messages API with an API key. See
+    # app/agents/claude_code_client.py for what differs.
+    answer_provider: str = "claude_code"
+
+    anthropic_api_key: str = ""  # answer_provider="api"
+    claude_code_oauth_token: str = ""  # answer_provider="claude_code"; `claude setup-token`
+    claude_bin: str = "claude"
+    claude_timeout: float = 180.0
+
     llm_model: str = "claude-opus-5"
     max_tokens: int = 4096
 

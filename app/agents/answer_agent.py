@@ -104,7 +104,15 @@ class AnswerAgent:
 
 
 def _default_messages() -> MessagesAPI:
-    # Imported here so that importing this module never requires the SDK or a key.
+    """Pick the credential path. Imports are local so neither is required to import this."""
+    if settings.answer_provider == "claude_code":
+        from app.agents.claude_code_client import ClaudeCodeMessages
+
+        return ClaudeCodeMessages()
+
+    if settings.answer_provider != "api":
+        raise ValueError(f"unknown answer_provider {settings.answer_provider!r} (api | claude_code)")
+
     import anthropic
 
     if not settings.anthropic_api_key:
