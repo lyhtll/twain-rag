@@ -28,7 +28,7 @@ import json
 import os
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
@@ -67,6 +67,10 @@ class ParsedResponse:
 
     parsed_output: Any
     stop_reason: str
+    # Non-empty when the model tried to use a tool we denied — i.e. tried to look outside
+    # the excerpts. Empty on every run so far. ponytail: not threaded into the run log
+    # yet; do that if a live run ever shows a denial.
+    permission_denials: list[Any] = field(default_factory=list)
 
 
 class ClaudeCodeMessages:
@@ -100,10 +104,11 @@ class ClaudeCodeMessages:
         with tempfile.TemporaryDirectory() as sandbox:
             raw = self._run(argv, cwd=sandbox, env=_subprocess_env(), timeout=settings.claude_timeout)
 
-        text = _result_text(raw)
+        envelope = _envelope(raw)
         return ParsedResponse(
-            parsed_output=output_format.model_validate_json(_json_span(text)),
-            stop_reason="end_turn",
+            parsed_output=output_format.model_validate_json(_json_span(str(envelope["result"]))),
+            stop_reason=str(envelope.get("stop_reason") or "end_turn"),
+            permission_denials=list(envelope.get("permission_denials") or []),
         )
 
 
@@ -133,14 +138,18 @@ def _run_claude(argv: list[str], *, cwd: str, env: dict[str, str], timeout: floa
     return result.stdout
 
 
-def _result_text(raw: str) -> str:
-    """Pull the model's text out of the CLI's own JSON envelope."""
+def _envelope(raw: str) -> dict[str, Any]:
+    """The CLI's own `--output-format json` object.
+
+    Verified live: {"type": "result", "subtype": "success", "is_error": false,
+    "result": "<text>", "stop_reason": ..., "permission_denials": [...], "usage": {...}}.
+    """
     envelope = json.loads(raw)
-    if isinstance(envelope, dict) and envelope.get("is_error"):
+    if not isinstance(envelope, dict) or "result" not in envelope:
+        raise RuntimeError(f"unexpected --output-format json envelope: {raw[:200]}")
+    if envelope.get("is_error"):
         raise RuntimeError(f"claude reported an error: {str(envelope.get('result'))[:400]}")
-    if isinstance(envelope, dict) and "result" in envelope:
-        return str(envelope["result"])
-    raise RuntimeError(f"unexpected --output-format json envelope: {raw[:200]}")
+    return envelope
 
 
 def _json_span(text: str) -> str:

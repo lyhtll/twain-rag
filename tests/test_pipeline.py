@@ -634,7 +634,9 @@ class RecordingRunner:
     def __call__(self, argv, *, cwd, env, timeout):
         self.argv, self.cwd, self.env = argv, cwd, env
         self.cwd_was_empty = not any(Path(cwd).iterdir())
-        return json.dumps({"type": "result", "result": self._result, "is_error": False})
+        return json.dumps({"type": "result", "subtype": "success", "is_error": False,
+                           "result": self._result, "stop_reason": "end_turn",
+                           "permission_denials": []})
 
 
 def _valid_output() -> str:

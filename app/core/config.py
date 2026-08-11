@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,7 +13,14 @@ class Settings(BaseSettings):
     answer_provider: str = "claude_code"
 
     anthropic_api_key: str = ""  # answer_provider="api"
-    claude_code_oauth_token: str = ""  # answer_provider="claude_code"; `claude setup-token`
+
+    # Claude Code's variable is CLAUDE_CODE_OAUTHTOKEN — one word, no underscore before
+    # TOKEN. Deriving the name from this field would look for CLAUDE_CODE_OAUTH_TOKEN and
+    # silently never bind, so the real spelling is listed explicitly.
+    claude_code_oauth_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("CLAUDE_CODE_OAUTHTOKEN", "claude_code_oauth_token"),
+    )
     claude_bin: str = "claude"
     claude_timeout: float = 180.0
 
