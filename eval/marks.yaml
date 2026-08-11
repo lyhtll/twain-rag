@@ -4,31 +4,49 @@
 # Basis for each mark: the answer was compared against the cited chunk's printed text and
 # against the expected answer recorded in questions.yaml at freeze time. A factually right
 # answer whose citation did not support it would be marked X — none were.
-
+#
+# `answer:` is the exact text that was judged. Generation is nondeterministic, so a
+# regenerated report can reword an answer; when it no longer matches, report.py shows
+# UNMARKED instead of inheriting a verdict for an answer no one read. Re-read the answer,
+# then update both fields together. The two `absent` questions carry no `answer:` — their
+# mark is computed from the refusal string, not judged by hand.
 q01:
   answer_correct: true
   note: 'Exact: "Thanks."'
+  answer: He sent back the word "Thanks."
 q02:
   answer_correct: true
   note: Telegram wording verbatim, incl. "greatly exaggerated"
+  answer: 'He telegrammed the Associated Press: "The reports of my death are greatly exaggerated."'
 q03:
   answer_correct: true
   note: Thomas Nast, correct
+  answer: He was staying at the home of political cartoonist Thomas Nast.
 q04:
   answer_correct: true
   note: Langdon's reply verbatim
+  answer: He said, "Take the girl. I know you better than they do."
 q05:
   answer_correct: true
   note: Quotation reproduced exactly
+  answer: He says cauliflower is nothing but cabbage with a college education.
 q06:
   answer_correct: true
   note: Pastor's reply paraphrased, cited quote verbatim
+  answer: His pastor replied that he wouldn't worry about it, if he had Twain's chances.
 q07:
   answer_correct: true
   note: Both accounts present — rivermen (Ch1 p.1) and saloon tab (Ch3 p.35)
+  answer: 'One account: as a Mississippi steamboat pilot, Clemens took the leadsmen''s call
+    "Mark twain," meaning two fathoms of water — a safe depth. The other: in Nevada saloons
+    he called out "Mark twain" to have two drinks written on his tab.'
 q08:
   answer_correct: true
   note: Both halves present; Archbishop reply quoted verbatim
+  answer: As a boy, Samuel Langhorne Clemens chased a piece of paper flying down the street
+    and found it was a page from a biography of Joan of Arc, then began reading everything
+    he could about her. He told the Archbishop of Orléans he would be "perfectly satisfied"
+    in the next life if he were near Joan of Arc and as far as possible from her enemies.
 q09:
   answer_correct: true
   note: Refused; typewriter absent from pp.1-47

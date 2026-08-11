@@ -716,3 +716,25 @@ def test_adapter_raises_without_a_token(monkeypatch):
     monkeypatch.delenv("CLAUDE_CODE_OAUTHTOKEN", raising=False)
     with pytest.raises(RuntimeError, match="claude setup-token"):
         ClaudeCodeMessages(runner=RecordingRunner(_valid_output())).parse(**_prompt())
+
+
+# --- eval marks -------------------------------------------------------------------------
+
+
+def test_a_mark_does_not_carry_over_to_a_reworded_answer():
+    """Generation is nondeterministic; a stale verdict must not be inherited silently."""
+    from eval.report import mark_for
+
+    judged = {"answer_correct": True, "answer": "He telegrammed the AP."}
+    assert mark_for(judged, "He telegrammed the AP.") is True
+    assert mark_for(judged, "He telegraphed the AP.") == "UNMARKED"
+    # Whitespace and curly punctuation are not a rewording — norm() folds both.
+    assert mark_for(judged, "He  telegrammed the  AP.") is True
+
+
+def test_a_mark_without_a_recorded_answer_still_applies():
+    """The two absent questions carry no `answer:` — their mark is computed, not judged."""
+    from eval.report import mark_for
+
+    assert mark_for({"answer_correct": True}, "anything") is True
+    assert mark_for({}, "anything") == "UNMARKED"

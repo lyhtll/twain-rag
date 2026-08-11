@@ -18,7 +18,7 @@ Read `.claude/skills/eval-honesty/SKILL.md` and `agent_docs/eval.md` before star
    - In the prompt and still wrong -> **generation**.
    Show the evidence for each classification; do not guess.
 5. Check the two `absent` questions specifically: the answer must be exactly
-   `Not in this book.`. Flag any hedged refusal as a failure.
+   `Not in this book.` — trailing period included. Flag any hedged refusal as a failure.
 6. Present a draft of the failure-analysis section for `docs/NOTES.md` (Korean, at
    least 2 failures: id, cause, evidence, the one change you would make) — but do not
    write it to the file without the user's approval; that memo is their submission.

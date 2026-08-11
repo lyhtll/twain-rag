@@ -46,6 +46,21 @@ def load_marks(path: Path = MARKS) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
+def mark_for(mark: dict[str, Any], answer: str) -> Any:
+    """The recorded judgement — but only if it judged *this* answer.
+
+    Generation is nondeterministic, so regenerating the report can reword an answer while
+    `marks.yaml` still holds the previous run's verdict. Keying the mark on the question id
+    alone would then attribute a human judgement to an answer no human read. `answer:` in
+    `marks.yaml` records the text that was judged; when it no longer matches, the mark
+    reverts to UNMARKED and has to be re-read rather than silently inherited.
+    """
+    judged = mark.get("answer")
+    if judged is not None and norm(judged) != norm(answer):
+        return "UNMARKED"
+    return mark.get("answer_correct", "UNMARKED")
+
+
 def satisfies(chunk: Chunk, option: dict[str, Any]) -> bool:
     return (
         chunk.page_start <= option["page"] <= chunk.page_end
@@ -78,11 +93,15 @@ def run() -> pd.DataFrame:
         pieces = question["evidence"]
         if question["kind"] == "absent":
             hit_label = "n/a"
-            correct: Any = response.refused and response.text == settings.refusal_text
+            # Same comparison the agent used to set `refused` (answer_agent.format_answer).
+            # A raw `==` here can only ever disagree with it: whitespace variation in the
+            # model's reply would leave `refused=True` while this marked the question X,
+            # writing a failure that did not happen into a generated honesty artifact.
+            correct: Any = response.refused and norm(response.text) == norm(settings.refusal_text)
         else:
             ok, found = evidence_hit(pieces, chunks)
             hit_label = "O" if ok else (f"X ({found}/{len(pieces)})" if len(pieces) > 1 else "X")
-            correct = marks.get(question["id"], {}).get("answer_correct", "UNMARKED")
+            correct = mark_for(marks.get(question["id"], {}), response.text)
 
         rows.append(
             {
