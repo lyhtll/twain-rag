@@ -1,0 +1,16 @@
+# The ebook is distributed for non-commercial use in unmodified form.
+# Only code and processing scripts go in the repository (assignment §2).
+data/*.pdf
+data/chunks.jsonl
+index/
+runs/
+
+# docs/EVAL.md, docs/CHUNK_STATS.md, docs/NOTES.md are deliverables — committed.
+
+.env
+__pycache__/
+*.pyc
+.venv/
+.idea/
+.cache/
+.pytest_cache/
