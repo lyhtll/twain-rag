@@ -218,11 +218,38 @@ outweighed by the interrogative shape, and Ch3's titles *are* questions, so
 question-shaped queries pull Ch3 in. BM25's IDF makes a rare noun decisive, which is
 exactly the complementarity the hybrid exists for.
 
-One consequence to note rather than fix: RRF rewards appearing in *both* lists, so a
-chunk ranked 2nd by BM25 and 3rd by dense can outrank a chunk ranked 1st by BM25 and
-absent from dense. On this query the correct chunk lands at rank 2 — inside top-3, so the
-answer is still grounded. Raising `candidates` or weighting the fusion would be tuning
-against a single observation; left alone.
+**The mechanism, measured.** Mean cosine from the query to each chapter's chunks:
+
+| Query form | Ch1 | Ch2 | Ch3 | the quote itself | dense #1 |
+|---|---|---|---|---|---|
+| `What does Twain say cauliflower is?` | 0.589 | 0.407 | 0.603 | 0.545 | wrong |
+| `Cauliflower is nothing but cabbage.` | 0.405 | 0.407 | 0.383 | **0.827** | correct |
+| `cauliflower` | 0.428 | 0.385 | 0.406 | 0.675 | correct |
+| `What happened to Sam Clemens in 1855?` | 0.507 | 0.361 | 0.629 | 0.314 | correct |
+
+Putting the query in interrogative form lifts its similarity to Ch1 narrative prose
+(0.405 -> 0.589) and Ch3 Q&A (0.383 -> 0.603) by about 0.18, while Ch2's aphorisms do not
+move at all (0.407). The quote itself sits at 0.545, below the *average* of 92 Ch1 chunks
+— which is how it ends up 96th of 187.
+
+So the content word is not being diluted. **bge-small encodes sentence form alongside
+content, and this book's chapters differ in form** (narrative prose, terse aphorism, Q&A).
+A question-shaped query is form-matched to Ch3 — where it helps, 0.629 and a correct top
+hit — and form-mismatched to a Ch2 aphorism, which is its own answer.
+
+Three fixes were considered and all rejected on measurement:
+
+- **Widen `candidates` (10 -> 20/30)**: the correct chunk is dense rank **96 of 187**, so
+  the window would have to cover half the corpus. Not a truncation artifact.
+- **Lower RRF's `k`**: computed for this case, k=5 and k=1 do not flip the order; only
+  k=0 does, and that makes any single retriever's top hit unbeatable — a worse trade.
+- **Prepend a form-neutralising phrase to Ch2 indexed documents**: plausible, unmeasured,
+  and invented to fix one query. Deferred to the frozen eval on day 5, which will say
+  whether Ch2 questions fail *systematically*. Today's does not: the quote reaches top-3.
+
+RRF is reporting the disagreement faithfully — one retriever ranks it 1st, the other 96th,
+so it lands 2nd overall. The outcome is still correct, and a hybrid surviving one
+retriever being badly wrong is the whole argument for having two.
 
 Day-3 chapter distribution over top-3 for five known questions: Ch1 9, Ch3 5, Ch2 1.
 Ch2 is 45% of the corpus and 7% of the retrieved slots, so **BM25's short-document bias
