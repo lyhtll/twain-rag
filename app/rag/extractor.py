@@ -87,8 +87,9 @@ def _lines(page: Any) -> list[Line]:
     the signal Ch2's paragraph detection reads. So fragments sharing a baseline are
     merged back into one line.
     """
-    fragments: list[tuple[float, float, float, bool, str]] = []
-    for block in page.get_text("dict", flags=TEXT_FLAGS)["blocks"]:
+    out: list[Line] = []
+    for block_index, block in enumerate(page.get_text("dict", flags=TEXT_FLAGS)["blocks"]):
+        fragments: list[tuple[float, float, float, bool, str]] = []
         for line in block.get("lines", []):
             spans = line.get("spans", [])
             text = "".join(s["text"] for s in spans).strip()
@@ -97,29 +98,31 @@ def _lines(page: Any) -> list[Line]:
             x0, y0, x1, _ = line["bbox"]
             fragments.append((y0, x0, x1, any("Bold" in s.get("font", "") for s in spans), text))
 
-    # Cluster by baseline first, *then* order within the line. Sorting by (y, x) up
-    # front would misplace a fragment whose baseline is off by a fraction of a point:
-    # at y=269.90 it sorts after everything at y=269.87 and lands at the end of the
-    # line instead of its x position.
-    fragments.sort(key=lambda f: f[0])
-    clusters: list[list[tuple[float, float, float, bool, str]]] = []
-    for frag in fragments:
-        if clusters and abs(frag[0] - clusters[-1][0][0]) <= SAME_LINE_TOLERANCE:
-            clusters[-1].append(frag)
-        else:
-            clusters.append([frag])
+        # Cluster by baseline first, *then* order within the line. Sorting by (y, x) up
+        # front would misplace a fragment whose baseline is off by a fraction of a
+        # point: at y=269.90 it sorts after everything at y=269.87 and lands at the end
+        # of the line instead of its x position.
+        fragments.sort(key=lambda f: f[0])
+        clusters: list[list[tuple[float, float, float, bool, str]]] = []
+        for frag in fragments:
+            if clusters and abs(frag[0] - clusters[-1][0][0]) <= SAME_LINE_TOLERANCE:
+                clusters[-1].append(frag)
+            else:
+                clusters.append([frag])
 
-    out: list[Line] = []
-    for cluster in clusters:
-        cluster.sort(key=lambda f: f[1])
-        out.append(
-            Line(
-                text=" ".join(f[4] for f in cluster),
-                bold=any(f[3] for f in cluster),
-                y_top=cluster[0][0],
-                x_right=max(f[2] for f in cluster),
+        for cluster in clusters:
+            cluster.sort(key=lambda f: f[1])
+            out.append(
+                Line(
+                    text=" ".join(f[4] for f in cluster),
+                    bold=any(f[3] for f in cluster),
+                    y_top=cluster[0][0],
+                    x_right=max(f[2] for f in cluster),
+                    block=block_index,
+                )
             )
-        )
+
+    out.sort(key=lambda ln: ln.y_top)
     return out
 
 

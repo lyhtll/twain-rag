@@ -11,12 +11,14 @@ from app.rag.extractor import PdfExtractor
 class FakePage:
     """Stands in for a pymupdf.Page.
 
-    Rows are (text, bold, y_top, x_left, x_right). x_left is real geometry here, not
-    padding: the extractor orders same-baseline fragments by it.
+    Each positional argument is one PyMuPDF *block*, which in this book is one printed
+    paragraph — that grouping is what Ch2 chunking reads. Rows are
+    (text, bold, y_top, x_left, x_right); x_left is real geometry, not padding, because
+    the extractor orders same-baseline fragments by it.
     """
 
-    def __init__(self, rows: list[tuple[str, bool, float, float, float]]) -> None:
-        self._rows = rows
+    def __init__(self, *blocks: list[tuple[str, bool, float, float, float]]) -> None:
+        self._blocks = blocks
 
     def get_text(self, kind: str, flags: int | None = None) -> dict:
         assert kind == "dict"
@@ -35,9 +37,10 @@ class FakePage:
                                 }
                             ],
                         }
-                        for text, bold, y, xl, xr in self._rows
+                        for text, bold, y, xl, xr in rows
                     ]
                 }
+                for rows in self._blocks
             ]
         }
 
@@ -140,3 +143,141 @@ def test_content_pages_raises_when_a_page_is_missing():
     doc = FakeDoc([_body_page(n) for n in range(1, 48) if n != 20])
     with pytest.raises(ValueError, match=r"missing \[20\]"):
         PdfExtractor(doc=doc).content_pages()
+
+
+# --------------------------------------------------------------------------- chunking
+
+from app.models.chunk import Chunk, Line, Page
+from app.rag.chunker import Chunker, mark_duplicates
+
+
+def _page(printed: int, *blocks) -> Page:
+    """A content page with the numeric header prepended to the first block."""
+    header = [(str(printed), False, 36.4, 200.0, 220.0)]
+    first, *rest = blocks or ([],)
+    return PdfExtractor(doc=FakeDoc([FakePage(header + list(first), *rest)])).parse()[0]._replace(
+        printed=printed
+    )
+
+
+def test_ch1_bold_heading_starts_a_chunk_and_body_follows():
+    pages = [
+        _page(
+            1,
+            [
+                ("Chapter 1: MARK TWAIN: ANECDOTES", True, 72.3, 72.0, 330.0),
+                ("Spelling", True, 94.2, 72.0, 119.3),
+                ("He deliberately misspelled a word.", False, 116.0, 72.0, 363.0),
+                ("Name", True, 140.0, 72.0, 100.0),
+                ("His real name was Samuel.", False, 160.0, 72.0, 363.0),
+            ],
+        )
+    ]
+    chunks = Chunker().chunk(pages)
+    assert [(c.title, c.text) for c in chunks] == [
+        ("Spelling", "He deliberately misspelled a word."),
+        ("Name", "His real name was Samuel."),
+    ], "the all-caps chapter heading must not become a chunk"
+
+
+def test_chunk_page_span_covers_every_contributing_page():
+    pages = [
+        _page(1, [("Steamboat Pilot", True, 94.2, 72.0, 200.0), ("It began here.", False, 116.0, 72.0, 363.0)]),
+        _page(2, [("It continued here.", False, 72.3, 72.0, 363.0)]),
+    ]
+    (chunk,) = Chunker().chunk(pages)
+    assert (chunk.page_start, chunk.page_end) == (1, 2)
+    assert chunk.page_label == "Ch.1, p.1-2"
+    assert chunk.text == "It began here. It continued here."
+
+
+def test_ch2_one_printed_paragraph_is_one_chunk():
+    """Two aphorisms, the first of which fills the right margin.
+
+    p.30 and p.32 print exactly this shape, and it is why the x_right "short last line"
+    heuristic under-counts Ch2 by two: blocks are the signal, not line width.
+    """
+    pages = [
+        _page(
+            27,
+            [("I have never taken any exercise except sleeping and resting.", False, 94.2, 72.0, 365.2)],
+            [("Go to Heaven for the climate, Hell for the company.", False, 116.0, 72.0, 328.9)],
+        )
+    ]
+    chunks = Chunker().chunk(pages)
+    assert len(chunks) == 2
+    assert chunks[0].title == "I have never taken any exercise except s…", chunks[0].title
+    assert chunks[1].title == "Go to Heaven for the climate, Hell for t…"
+    assert all(c.chapter == 2 for c in chunks)
+
+
+def test_ch3_merges_a_wrapped_question_and_drops_the_notice():
+    pages = [
+        _page(
+            34,
+            [
+                ("Chapter 3: MARK TWAIN: HIS LIFE", True, 72.3, 72.0, 330.0),
+                ("Note: Some anecdotes are repeated in this short", True, 94.2, 72.0, 340.0),
+                ("biographical sketch.", True, 108.0, 72.0, 200.0),
+                ("What is one story of how Mark Twain got his", True, 130.0, 72.0, 340.0),
+                ("pseudonym?", True, 144.0, 72.0, 150.0),
+                ("Rivermen called out mark twain.", False, 166.0, 72.0, 363.0),
+            ],
+        )
+    ]
+    (chunk,) = Chunker().chunk(pages)
+    assert chunk.title == "What is one story of how Mark Twain got his pseudonym?"
+    assert chunk.text == "Rivermen called out mark twain."
+
+
+def _chunk(cid: str, chapter: int, text: str, page: int = 1) -> Chunk:
+    return Chunk(id=cid, chapter=chapter, title="t", page_start=page, page_end=page, text=text)
+
+
+SHARED = (
+    "As a young schoolboy Samuel got into trouble with his teacher and she sent him "
+    "outside to find a switch that she could use to hit him young Samuel returned with "
+    "a wood shaving that would definitely not hurt"
+)
+FILLER = " ".join(f"word{i}" for i in range(220))
+
+
+def test_duplicates_link_a_long_retelling_across_chapters():
+    """The Ch3 fixture is deliberately over 200 words.
+
+    difflib's autojunk only engages at len(b) >= 200, so a short fixture would pass even
+    with the flag missing — and with it missing this pair reports a longest match of 1.
+    """
+    a = _chunk("c1", 1, SHARED)
+    b = _chunk("c2", 3, f"{FILLER} {SHARED} {FILLER}")
+    assert len(b.text.split()) > 200
+    assert mark_duplicates([a, b]) == 1
+    assert a.duplicates == ["c2"] and b.duplicates == ["c1"]
+
+
+def test_duplicates_catch_a_short_restatement_by_ratio():
+    """Ch3's 'real name' answer is 8 words and no absolute threshold can reach it."""
+    a = _chunk("c1", 1, f"Mark Twain's real name was Samuel Langhorne Clemens. {FILLER}")
+    b = _chunk("c2", 3, "Mark Twain's real name was Samuel Langhorne Clemens.")
+    assert mark_duplicates([a, b], min_words=20) == 1
+
+
+def test_two_different_ch1_anecdotes_are_never_linked_to_each_other():
+    """One Ch3 block retells four separate Ch1 anecdotes (measured: c0183).
+
+    A shared group label would make those four look like duplicates of one another and
+    collapse them at retrieval time, so the links must stay pairwise.
+    """
+    a = _chunk("c1", 1, SHARED)
+    b = _chunk("c2", 1, f"Something else entirely. {FILLER}")
+    big = _chunk("c3", 3, f"{SHARED} {FILLER} Something else entirely. {FILLER}")
+    mark_duplicates([a, b, big])
+    assert set(big.duplicates) == {"c1", "c2"}
+    assert a.duplicates == ["c3"] and b.duplicates == ["c3"]
+    assert "c2" not in a.duplicates and "c1" not in b.duplicates
+
+
+def test_unrelated_chunks_are_not_linked():
+    a = _chunk("c1", 1, "A short anecdote about a cat and a hot stove lid.")
+    b = _chunk("c2", 3, f"{FILLER} nothing in common here {FILLER}")
+    assert mark_duplicates([a, b]) == 0

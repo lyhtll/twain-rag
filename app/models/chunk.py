@@ -1,6 +1,6 @@
 from typing import NamedTuple
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # PyMuPDF coordinates: origin at the page's top-left, units are pt (1/72 inch),
 # y grows downward. This book is 432 x 648 pt (6 x 9 in). Every line from
@@ -12,6 +12,7 @@ class Line(NamedTuple):
     bold: bool  # span["font"] contains "Bold" -> heading candidate
     y_top: float  # bbox[1]; reading order, paragraph gaps, topmost = page-number header
     x_right: float  # bbox[2]; justified body lines end at a near-constant right margin
+    block: int  # PyMuPDF block index; one block == one printed paragraph in this book
 
 
 class Page(NamedTuple):
@@ -29,7 +30,10 @@ class Chunk(BaseModel):
     page_start: int  # printed page numbers, not PDF indices
     page_end: int
     text: str
-    dup_group: str | None = None  # same anecdote retold in another chapter
+    # Ids of chunks that retell the same passage. Pairwise, not a group label: one Ch3
+    # block can contain four *different* Ch1 anecdotes, so a shared group id would make
+    # those four look like duplicates of each other and collapse them wrongly.
+    duplicates: list[str] = Field(default_factory=list)
 
     @property
     def page_label(self) -> str:

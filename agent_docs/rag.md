@@ -29,7 +29,7 @@ defeats the point of citing.
 | Front matter | — | 1–3 | Title, license, TOC — **excluded** |
 | Ch1 ANECDOTES | 1–26 | 4–29 | 92 bold headings (`Spelling`, `Steamboat Pilot`) + body |
 | Ch2 QUOTATIONS | 27–33 | 30–36 | **No headings.** Quotations run as consecutive paragraphs |
-| Ch3 HIS LIFE | 34–47 | 37–50 | 9 bold **questions** as headings, each wrapping 2 lines, + long answers |
+| Ch3 HIS LIFE | 34–47 | 37–50 | 11 bold **questions** as headings, most wrapping 2 lines, + long answers |
 | Appendix A | 48–49 | 51–52 | The *author's* autobiography — **excluded** |
 | Appendix B | 50–55 | 53–58 | The author's book list — **excluded** |
 
@@ -68,7 +68,7 @@ sorts after everything at y=269.87 and lands at the end of the line, producing
 `span["font"]` contains `"Bold"`. This is why PyMuPDF is used and pypdf/pdftotext are
 not — neither exposes font weight. Measured bold-line counts: Ch1 93 (1 chapter heading
 + 92 anecdotes), Ch2 1 (chapter heading only — confirming Ch2 has no titles), Ch3 22
-(chapter heading + a 2-line `Note:` + 9 questions wrapping across 2 lines each).
+(chapter heading + a 2-line `Note:` + 11 questions, 8 of which wrap across 2 lines).
 
 Regex fallback if font detection ever fails: line ≤ 45 chars, does not end in
 terminal punctuation, previous line does. Body text is justified to 55–58 chars, so a
@@ -81,8 +81,17 @@ A single rule would be wrong for two of the three. Exact boundary code is confir
 day 2 against the real book; the units are:
 
 - **Ch1** — bold heading to next bold heading. `title` = the heading.
-- **Ch2** — one quotation = one paragraph. `title` is derived from the first 40 chars of
-  the text plus `…`, since nothing is printed to use.
+- **Ch2** — one quotation = one paragraph, and **a paragraph is one PyMuPDF block**.
+  `title` is derived from the first 40 chars of the text plus `…`, since nothing is
+  printed to use.
+
+  Three boundary signals were measured on day 2: blocks give 84 paragraphs, the
+  between-paragraph y-gap (21.7pt vs 13.8pt leading — cleanly bimodal) also gives 84, and
+  the "last line is short" x_right heuristic gives **82**. The two it loses are one-line
+  quotations that happen to fill the right margin exactly — p.30 "I have never taken any
+  exercise except sleeping and resting." (x_right 365.2) and p.32 "God created war so that
+  Americans would learn geography." (363.6) — each silently merged into the next
+  quotation. Blocks are the signal; line width is not.
 - **Ch3** — bold question (merge consecutive bold lines; the question wraps) to the next
   question. `title` = the full question.
 - **Excluded** — front matter, both appendices, the `Chapter N: ...` all-caps lines, and
@@ -97,10 +106,11 @@ in a single paragraph ("There are lies, damned lies, and statistics. Against the
 of laughter nothing can stand."). Splitting on sentences would be re-editing the book;
 the printed paragraph stays the unit.
 
-Measured chunk counts (day 1): Ch1 92 at ~420 chars, Ch2 82 at ~89 chars, Ch3 9 at
-~2482 chars — about 183 total. The 20x spread across chapters is why one rule could not
-have worked, and why **Ch2's very short chunks are a day-3 watch item**: BM25 length
-normalization favours short documents, so Ch2 may crowd out top-3.
+Measured after implementation (day 2, see `docs/CHUNK_STATS.md`): **187 chunks** — Ch1 92
+at 405 chars mean, Ch2 84 at 86, Ch3 11 at 1961 (max 4786). The 20x spread across
+chapters is why one rule could not have worked, and why **Ch2's very short chunks are a
+day-3 watch item**: BM25 length normalization favours short documents, so Ch2 may crowd
+out top-3.
 
 `Chunk.page_start` / `page_end` come from the min/max printed page of the lines that fed
 the chunk — recorded during the page-by-page walk. There is no global text string and no
@@ -128,7 +138,26 @@ finds nothing.** Use the longest common subsequence of **words**, threshold 25 w
 
 ```python
 m = difflib.SequenceMatcher(None, a_words, b_words, autojunk=False).find_longest_match(...)
+is_dup = m.size >= 20 or m.size >= 0.8 * min(len(a_words), len(b_words))
 ```
+
+**Two criteria, because either alone misses a real duplicate.** Measured longest-match
+sizes fall in a clean band: genuine retellings are >= 23 words, coincidence tops out at
+8, and nothing lands between — so any absolute threshold in 9..23 gives identical
+results, and 20 sits mid-band. The absolute rule alone would miss Ch3's "real name"
+answer, which is 8 words long and verbatim the opening sentence of Ch1 'Name'; the
+relative rule catches it. The relative rule alone would miss Ch1 'Punishment', whose
+verbatim retelling in Ch3 is cut into 23-word runs by a single substituted name
+(Ch1 "Samuel" -> Ch3 "Sam").
+
+**Links are pairwise, not a shared group label.** One Ch3 block retells up to four
+*different* Ch1 anecdotes (measured: Ch3 p.41-43 contains 'Profanity', 'Beds',
+'"Take the Girl"' and 'Clothing'). A single `dup_group` id would make those four look
+like duplicates of one another and collapse them at retrieval time, which is wrong — they
+are unrelated anecdotes. So `Chunk.duplicates` holds ids, set on both sides, and collapse
+drops a chunk only when a higher-ranked kept chunk names it.
+
+Result on this book: **15 pairs across 21 chunks**, from 92 x 11 = 1012 comparisons.
 
 Candidates are **Ch1 x Ch3 only** — 92 x 9 = 828 pairs. Ch1 x Ch2 was measured on day 1
 and shares no 8-word run with any quotation: Ch2 holds independent aphorisms, not retold
