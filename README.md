@@ -28,15 +28,7 @@ unset ANTHROPIC_API_KEY   # 둘 다 있으면 API 키가 OAuth 토큰을 이긴�
 색인은 저장소에 없으므로 첫 명령을 건너뛸 수 없다. `data/`, `index/`,
 `docs/CHUNK_STATS.md` 가 이 단계에서 만들어진다.
 
+http://localhost:8000 접속하여서 질문을 던지면 RAG 기반으로 답변을 한다.
+
 **질문은 영어로 한다.** 임베딩이 영어 전용(`bge-small-en-v1.5`)이라 한국어 질의는 검색
 단계에서 실패한다 — 이유는 `docs/NOTES.md` §3.
-
-## 평가와 테스트
-
-```bash
-.venv/bin/python -m eval.report        # 10문항 실행 -> docs/EVAL.md
-.venv/bin/python -m pytest -q          # 47개, 약 0.5초
-```
-
-`docs/EVAL.md` 와 `docs/CHUNK_STATS.md` 는 생성물이므로 손으로 고치지 않는다.
-색인·검색·테스트는 자격증명 없이 돌아간다 — 답변 생성에만 필요하다.
