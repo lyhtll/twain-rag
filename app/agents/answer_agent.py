@@ -109,7 +109,8 @@ def _default_messages() -> MessagesAPI:
 
     if not settings.anthropic_api_key:
         raise RuntimeError(
-            "anthropic_api_key is unset — put `anthropic_api_key=sk-ant-...` in .env "
-            "or export ANTHROPIC_API_KEY before starting the server"
+            "no API key configured — copy .env.example to .env and fill in "
+            "ANTHROPIC_API_KEY (or export it). Ingest, retrieval and the tests do not "
+            "need one; only answer generation does."
         )
     return anthropic.Anthropic(api_key=settings.anthropic_api_key).messages
